@@ -38,6 +38,5 @@ class MainActivity:AppCompatActivity(){
  @Suppress("DEPRECATION") private fun sendSms(number:String,message:String){try{val sm=if(Build.VERSION.SDK_INT>=31)getSystemService(SmsManager::class.java) else SmsManager.getDefault();sm.sendTextMessage(number,null,message,null,null);Toast.makeText(this,"SMS sent.",Toast.LENGTH_SHORT).show()}catch(e:Exception){Toast.makeText(this,"SMS failed: ${e.message}",Toast.LENGTH_LONG).show()}}
  private fun addEvent(desc:String){val h=getHistory();h.put(JSONObject().put("time",SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.getDefault()).format(Date())).put("description",desc));prefs.edit().putString("history",h.toString()).apply();renderHistory()}
  private fun getHistory():JSONArray{val r=prefs.getString("history",null);return try{if(r.isNullOrBlank())JSONArray() else JSONArray(r)}catch(_:Exception){JSONArray()}}
- private fun renderHistory(){val h=getHistory();if(h.length()==0){binding.historyText.text="No events recorded.";return};val lines=mutableListOf<String>();for(i in h.length()-1 downTo 0){val e=h.optJSONObject(i)?:continue;lines+="${e.optString("time")}  ${e.optString("description")}"};binding.historyText.text=lines.joinToString("
-")}
+ private fun renderHistory(){val h=getHistory();if(h.length()==0){binding.historyText.text="No events recorded.";return};val lines=mutableListOf<String>();for(i in h.length()-1 downTo 0){val e=h.optJSONObject(i)?:continue;lines+="${e.optString("time")}  ${e.optString("description")}"};binding.historyText.text=lines.joinToString("\n")}
 }
