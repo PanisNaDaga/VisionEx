@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.telephony.SmsManager
+import android.telephony.SubscriptionManager
 import android.view.View
 import android.widget.SeekBar
 import android.widget.Toast
@@ -246,7 +247,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun sendEmergency(test: Boolean) {
         saveContact()
-        val number = binding.contactInput.text.toString().trim()
+        val number = normalizePhilippineNumber(binding.contactInput.text.toString())
         if (number.isBlank()) {
             Toast.makeText(this, R.string.enter_emergency_contact, Toast.LENGTH_SHORT).show()
             return
@@ -279,6 +280,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun normalizePhilippineNumber(input: String): String {
+        val cleaned = input.trim().replace(" ", "").replace("-", "")
+        return when {
+            cleaned.startsWith("+63") -> cleaned
+            cleaned.startsWith("09") && cleaned.length == 11 -> "+63" + cleaned.substring(1)
+            cleaned.startsWith("9") && cleaned.length == 10 -> "+63" + cleaned
+            else -> cleaned
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun sendSms(number: String, message: String) {
         val canSendDirectly = ContextCompat.checkSelfPermission(
@@ -287,10 +298,21 @@ class MainActivity : AppCompatActivity() {
 
         if (canSendDirectly) {
             try {
-                val sm = if (Build.VERSION.SDK_INT >= 31) getSystemService(SmsManager::class.java) else SmsManager.getDefault()
-                sm.sendTextMessage(number, null, message, null, null)
-                Toast.makeText(this, R.string.sms_sent, Toast.LENGTH_SHORT).show()
-                return
+                val defaultSubId = SubscriptionManager.getDefaultSmsSubscriptionId()
+
+                if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    val sm = if (Build.VERSION.SDK_INT >= 31) {
+                        getSystemService(SmsManager::class.java).createForSubscriptionId(defaultSubId)
+                    } else {
+                        SmsManager.getSmsManagerForSubscriptionId(defaultSubId)
+                    }
+                    sm.sendTextMessage(number, null, message, null, null)
+                    Toast.makeText(this, R.string.sms_sent, Toast.LENGTH_SHORT).show()
+                    addEvent("Emergency SMS sent using default SIM")
+                    return
+                } else {
+                    addEvent("No default SMS SIM selected; opening messaging app")
+                }
             } catch (_: Exception) {
                 addEvent("Direct SMS unavailable; opening messaging app")
             }
