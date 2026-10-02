@@ -2,6 +2,10 @@ package com.visionex.app
 
 import android.Manifest
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.app.PendingIntent
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -33,6 +37,24 @@ class MainActivity : AppCompatActivity() {
     private val location by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var alerts = 0
     private var emergencyThreshold = 3
+    private var pendingSmsNumber: String? = null
+    private var pendingSmsMessage: String? = null
+
+    private val smsSentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (resultCode) {
+                Activity.RESULT_OK -> {
+                    Toast.makeText(this@MainActivity, R.string.sms_sent, Toast.LENGTH_SHORT).show()
+                    addEvent("SMS accepted by Android/carrier")
+                }
+                SmsManager.RESULT_ERROR_NO_SERVICE -> smsFailure("No cellular service")
+                SmsManager.RESULT_ERROR_RADIO_OFF -> smsFailure("Cellular radio is off")
+                SmsManager.RESULT_ERROR_NULL_PDU -> smsFailure("Invalid SMS data")
+                SmsManager.RESULT_ERROR_GENERIC_FAILURE -> smsFailure("Carrier or SMS service rejected the message")
+                else -> smsFailure("SMS failed with code " + resultCode)
+            }
+        }
+    }
 
     private val launcher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -60,6 +82,12 @@ class MainActivity : AppCompatActivity() {
         setupActions()
         updateAlerts()
         renderHistory()
+        ContextCompat.registerReceiver(
+            this,
+            smsSentReceiver,
+            android.content.IntentFilter(packageName + ".SMS_SENT"),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         requestPermissionsNow()
     }
 
@@ -177,6 +205,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        try { unregisterReceiver(smsSentReceiver) } catch (_: Exception) {}
         ble.disconnect()
         super.onDestroy()
     }
@@ -290,34 +319,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @Suppress("DEPRECATION")
-    private fun sendSms(number: String, message: String) {
-        val canSendDirectly = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.SEND_SMS
-        ) == PackageManager.PERMISSION_GRANTED
+    private fun smsFailure(reason: String) {
+        addEvent("SMS failed: " + reason)
+        Toast.makeText(this, "SMS failed: " + reason, Toast.LENGTH_LONG).show()
+        val number = pendingSmsNumber
+        val message = pendingSmsMessage
+        if (!number.isNullOrBlank() && message != null) openSmsApp(number, message)
+    }
 
-        if (canSendDirectly) {
-            try {
-                val defaultSubId = SubscriptionManager.getDefaultSmsSubscriptionId()
-
-                if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                    val sm = if (Build.VERSION.SDK_INT >= 31) {
-                        getSystemService(SmsManager::class.java).createForSubscriptionId(defaultSubId)
-                    } else {
-                        SmsManager.getSmsManagerForSubscriptionId(defaultSubId)
-                    }
-                    sm.sendTextMessage(number, null, message, null, null)
-                    Toast.makeText(this, R.string.sms_sent, Toast.LENGTH_SHORT).show()
-                    addEvent("Emergency SMS sent using default SIM")
-                    return
-                } else {
-                    addEvent("No default SMS SIM selected; opening messaging app")
-                }
-            } catch (_: Exception) {
-                addEvent("Direct SMS unavailable; opening messaging app")
-            }
-        }
-
+    private fun openSmsApp(number: String, message: String) {
         try {
             startActivity(Intent(Intent.ACTION_SENDTO).apply {
                 data = Uri.parse("smsto:" + Uri.encode(number))
@@ -326,6 +336,48 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.sms_opened, Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.sms_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun sendSms(number: String, message: String) {
+        pendingSmsNumber = number
+        pendingSmsMessage = message
+
+        val canSendDirectly = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.SEND_SMS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!canSendDirectly) {
+            addEvent("Direct SMS permission unavailable; opening messaging app")
+            openSmsApp(number, message)
+            return
+        }
+
+        try {
+            val defaultSubId = SubscriptionManager.getDefaultSmsSubscriptionId()
+            if (defaultSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                smsFailure("No default SMS SIM is selected")
+                return
+            }
+
+            val sm = if (Build.VERSION.SDK_INT >= 31) {
+                getSystemService(SmsManager::class.java).createForSubscriptionId(defaultSubId)
+            } else {
+                SmsManager.getSmsManagerForSubscriptionId(defaultSubId)
+            }
+
+            val sentIntent = PendingIntent.getBroadcast(
+                this,
+                1001,
+                Intent(packageName + ".SMS_SENT").setPackage(packageName),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            sm.sendTextMessage(number, null, message, sentIntent, null)
+            Toast.makeText(this, "Sending SMS...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            smsFailure(e.message ?: "Unknown SMS error")
         }
     }
 
