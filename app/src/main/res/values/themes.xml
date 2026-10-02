@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><resources><style name="Theme.VisionEx" parent="Theme.MaterialComponents.DayNight.NoActionBar"><item name="colorPrimary">@color/visionex_primary</item><item name="colorPrimaryVariant">@color/visionex_primary_dark</item><item name="colorSecondary">@color/visionex_accent</item><item name="android:fontFamily">sans</item></style></resources>
