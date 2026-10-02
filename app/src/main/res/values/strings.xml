@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--suppress SpellCheckingInspection -->
-    <string name="app_name">VisionEx</string>
-    <string name="nearby_permission_needed">Nearby-device permission is needed to connect to VisionEx.</string>
-    <string name="battery_percent">Battery: %1$s%%</string>
-    <string name="drowsiness_detected">DROWSINESS DETECTED</string>
-    <string name="normal">NORMAL</string>
-    <string name="unacknowledged_alerts">Unacknowledged alerts: %1$d</string>
-    <string name="enter_emergency_contact">Enter an emergency contact first.</string>
-    <string name="sms_location_permissions_required">SMS and location permissions are required.</string>
-    <string name="sms_sent">SMS sent.</string>
-    <string name="sms_failed">SMS failed: %1$s</string>
-    <string name="no_events_recorded">No events recorded.</string>
-    <string name="location_permission_required">Location permission is required for the emergency message.</string>\n    <string name="sms_opened">Emergency message prepared. Tap Send in your messaging app.</string>\n</resources>
+<string name="app_name">VisionEx</string><string name="title_visionex">VISIONEX</string><string name="subtitle">Driver Drowsiness Monitoring</string>
+<string name="tab_home">Home</string><string name="tab_history">History</string><string name="tab_settings">Settings</string>
+<string name="device">Device</string><string name="disconnected">Disconnected</string><string name="scan_for_visionex">Scan for VisionEx</string>
+<string name="current_status">Current Status</string><string name="battery_unknown">Battery: --%</string><string name="battery_percent">Battery: %1$s%%</string>
+<string name="unacknowledged_alerts">Unacknowledged alerts: %1$d</string><string name="acknowledge_alert">Acknowledge Alert</string>
+<string name="prototype_testing">Prototype Testing</string><string name="simulate_drowsiness">Simulate Drowsiness Event</string>
+<string name="event_history">Event History</string><string name="clear_history">Clear History</string><string name="no_events_recorded">No events recorded.</string>
+<string name="alert_preferences">Alert Preferences</string><string name="vibration_enabled">Enable vibration alert</string><string name="buzzer_enabled">Enable audible buzzer</string>
+<string name="vibration_strength">Vibration strength: %1$d%%</string><string name="apply_vibration_strength">Apply Vibration Strength</string>
+<string name="emergency_threshold">Emergency alert threshold: %1$d alerts</string><string name="emergency">Emergency</string><string name="emergency_contact_hint">Emergency contact number</string>
+<string name="automatic_sms">Automatic SMS after the selected number of unacknowledged alerts</string><string name="send_test_emergency_sms">Send Test Emergency SMS</string>
+<string name="appearance">Appearance</string><string name="theme_system">System</string><string name="theme_light">Light</string><string name="theme_dark">Dark</string>
+<string name="nearby_permission_needed">Nearby-device permission is needed to connect to VisionEx.</string><string name="drowsiness_detected">DROWSINESS DETECTED</string><string name="normal">NORMAL</string>
+<string name="enter_emergency_contact">Enter an emergency contact first.</string><string name="sms_sent">SMS sent.</string><string name="sms_failed">SMS failed: %1$s</string>
+<string name="location_permission_required">Location permission is required for the emergency message.</string><string name="sms_opened">Emergency message prepared. Tap Send in your messaging app.</string>
+<string name="settings_sent">Settings sent to VisionEx.</string>
+</resources>
