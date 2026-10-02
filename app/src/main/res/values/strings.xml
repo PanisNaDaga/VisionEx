@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--suppress SpellCheckingInspection -->
+    <string name="app_name">VisionEx</string>
+    <string name="nearby_permission_needed">Nearby-device permission is needed to connect to VisionEx.</string>
+    <string name="battery_percent">Battery: %1$s%%</string>
+    <string name="drowsiness_detected">DROWSINESS DETECTED</string>
+    <string name="normal">NORMAL</string>
+    <string name="unacknowledged_alerts">Unacknowledged alerts: %1$d</string>
+    <string name="enter_emergency_contact">Enter an emergency contact first.</string>
+    <string name="sms_location_permissions_required">SMS and location permissions are required.</string>
+    <string name="sms_sent">SMS sent.</string>
+    <string name="sms_failed">SMS failed: %1$s</string>
+    <string name="no_events_recorded">No events recorded.</string>
+</resources>
