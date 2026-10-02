@@ -12,4 +12,4 @@
     <string name="sms_sent">SMS sent.</string>
     <string name="sms_failed">SMS failed: %1$s</string>
     <string name="no_events_recorded">No events recorded.</string>
-</resources>
+    <string name="location_permission_required">Location permission is required for the emergency message.</string>\n    <string name="sms_opened">Emergency message prepared. Tap Send in your messaging app.</string>\n</resources>
