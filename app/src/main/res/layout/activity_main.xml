@@ -1,27 +1,562 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp">
-<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/title_visionex" android:textStyle="bold" android:textSize="28sp"/>
-<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/subtitle" android:layout_marginBottom="8dp"/>
-<com.google.android.material.tabs.TabLayout android:id="@+id/tabLayout" android:layout_width="match_parent" android:layout_height="wrap_content" app:tabMode="fixed" app:tabGravity="fill"/>
-<ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
-<FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">
-<LinearLayout android:id="@+id/homeSection" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="12dp">
-<com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" app:cardCornerRadius="12dp"><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/device" android:textStyle="bold" android:textSize="18sp"/><TextView android:id="@+id/connectionText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/disconnected"/><Button android:id="@+id/connectButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/scan_for_visionex"/></LinearLayout></com.google.android.material.card.MaterialCardView>
-<com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" app:cardCornerRadius="12dp"><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/current_status" android:textStyle="bold" android:textSize="18sp"/><TextView android:id="@+id/drowsinessText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/normal" android:textStyle="bold" android:textSize="26sp"/><TextView android:id="@+id/batteryText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/battery_unknown"/><TextView android:id="@+id/alertCountText" android:layout_width="wrap_content" android:layout_height="wrap_content"/><Button android:id="@+id/ackButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/acknowledge_alert"/></LinearLayout></com.google.android.material.card.MaterialCardView>
-<Button android:id="@+id/simulateButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/simulate_drowsiness"/>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/app_background"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="18dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/monitoring_overline"
+        android:textColor="@color/visionex_accent"
+        android:textSize="11sp"
+        android:letterSpacing="0.14"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/title_visionex"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="30sp"
+        android:letterSpacing="0.04"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:layout_marginBottom="14dp"
+        android:text="@string/subtitle"
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp" />
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:background="@android:color/transparent"
+        app:tabMode="fixed"
+        app:tabGravity="fill"
+        app:tabIndicatorColor="@color/visionex_accent"
+        app:tabIndicatorHeight="3dp"
+        app:tabIndicatorFullWidth="false"
+        app:tabSelectedTextColor="@color/visionex_accent"
+        app:tabTextColor="@color/text_secondary" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="ifContentScrolls">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:id="@+id/homeSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="10dp"
+                android:paddingBottom="20dp">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/card_stroke"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/device_link_title"
+                                android:textColor="?android:attr/textColorPrimary"
+                                android:textSize="17sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/connectionText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/metric_tile"
+                                android:paddingStart="10dp"
+                                android:paddingTop="6dp"
+                                android:paddingEnd="10dp"
+                                android:paddingBottom="6dp"
+                                android:text="@string/disconnected"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="5dp"
+                            android:layout_marginBottom="12dp"
+                            android:text="@string/device_link_hint"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+
+                        <Button
+                            android:id="@+id/connectButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:text="@string/scan_for_visionex"
+                            app:cornerRadius="14dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/statusCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="22dp"
+                    app:cardElevation="2dp"
+                    app:strokeColor="@color/card_stroke"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/live_status_title"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp"
+                            android:letterSpacing="0.12"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/drowsinessText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/status_pill_normal"
+                            android:paddingStart="14dp"
+                            android:paddingTop="9dp"
+                            android:paddingEnd="14dp"
+                            android:paddingBottom="9dp"
+                            android:text="@string/normal"
+                            android:textColor="@color/visionex_ok"
+                            android:textSize="22sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/statusHelperText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:layout_marginBottom="18dp"
+                            android:text="@string/status_normal_hint"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textSize="14sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/batteryText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginEnd="6dp"
+                                android:background="@drawable/metric_tile"
+                                android:padding="12dp"
+                                android:text="@string/battery_unknown"
+                                android:textColor="?android:attr/textColorPrimary"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/alertCountText"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="6dp"
+                                android:background="@drawable/metric_tile"
+                                android:padding="12dp"
+                                android:textColor="?android:attr/textColorPrimary"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/ackButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:minHeight="48dp"
+                            android:text="@string/acknowledge_alert"
+                            app:cornerRadius="14dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="18dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="@color/card_stroke"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/test_tools_title"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textStyle="bold"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:layout_marginBottom="10dp"
+                            android:text="@string/test_tools_hint"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+
+                        <Button
+                            android:id="@+id/simulateButton"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="46dp"
+                            android:text="@string/simulate_drowsiness"
+                            app:cornerRadius="14dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/historySection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="10dp"
+                android:paddingBottom="20dp"
+                android:visibility="gone">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/card_stroke"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/event_history"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textSize="20sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp"
+                            android:text="@string/history_hint"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/historyText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="220dp"
+                            android:background="@drawable/metric_tile"
+                            android:padding="14dp"
+                            android:text="@string/no_events_recorded"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textSize="13sp"
+                            android:lineSpacingExtra="4dp" />
+
+                        <Button
+                            android:id="@+id/clearHistoryButton"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:text="@string/clear_history"
+                            app:cornerRadius="14dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/settingsSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="10dp"
+                android:paddingBottom="20dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_title"
+                    android:textColor="?android:attr/textColorPrimary"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:layout_marginBottom="14dp"
+                    android:text="@string/settings_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/card_stroke"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/alert_preferences"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/vibrationSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/vibration_enabled" />
+
+                        <TextView
+                            android:id="@+id/vibrationStrengthText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:textColor="@color/text_secondary" />
+
+                        <SeekBar
+                            android:id="@+id/vibrationSeekBar"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="100" />
+
+                        <Button
+                            android:id="@+id/applyVibrationButton"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/apply_vibration_strength"
+                            app:cornerRadius="14dp" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/buzzerSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/buzzer_enabled" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="12dp"
+                            android:background="@color/card_stroke" />
+
+                        <TextView
+                            android:id="@+id/emergencyThresholdText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/text_secondary" />
+
+                        <SeekBar
+                            android:id="@+id/emergencyThresholdSeekBar"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="4" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/card_stroke"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/emergency"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="10dp"
+                            android:text="@string/emergency_hint"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+
+                        <EditText
+                            android:id="@+id/contactInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/emergency_contact_hint"
+                            android:inputType="phone"
+                            android:singleLine="true" />
+
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/autoSmsSwitch"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/automatic_sms" />
+
+                        <Button
+                            android:id="@+id/testSmsButton"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/send_test_emergency_sms"
+                            app:cornerRadius="14dp" />
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:cardBackgroundColor="@color/surface"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="1dp"
+                    app:strokeColor="@color/card_stroke"
+                    app:strokeWidth="1dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/appearance"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <RadioGroup
+                            android:id="@+id/themeGroup"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="horizontal">
+
+                            <RadioButton
+                                android:id="@+id/themeSystem"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/theme_system" />
+
+                            <RadioButton
+                                android:id="@+id/themeLight"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/theme_light" />
+
+                            <RadioButton
+                                android:id="@+id/themeDark"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/theme_dark" />
+                        </RadioGroup>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+            </LinearLayout>
+        </FrameLayout>
+    </ScrollView>
 </LinearLayout>
-<LinearLayout android:id="@+id/historySection" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="12dp" android:visibility="gone"><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/event_history" android:textStyle="bold" android:textSize="20sp"/><TextView android:id="@+id/historyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="220dp" android:padding="12dp"/><Button android:id="@+id/clearHistoryButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/clear_history"/></LinearLayout>
-<LinearLayout android:id="@+id/settingsSection" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="12dp" android:visibility="gone">
-<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/alert_preferences" android:textStyle="bold" android:textSize="20sp"/>
-<com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/vibrationSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/vibration_enabled"/>
-<TextView android:id="@+id/vibrationStrengthText" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/vibrationSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100"/><Button android:id="@+id/applyVibrationButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/apply_vibration_strength"/>
-<com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/buzzerSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/buzzer_enabled"/>
-<TextView android:id="@+id/emergencyThresholdText" android:layout_width="wrap_content" android:layout_height="wrap_content"/><SeekBar android:id="@+id/emergencyThresholdSeekBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="4"/>
-<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/emergency" android:textStyle="bold" android:textSize="20sp" android:layout_marginTop="12dp"/>
-<EditText android:id="@+id/contactInput" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="@string/emergency_contact_hint" android:inputType="phone"/>
-<com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/autoSmsSwitch" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/automatic_sms"/>
-<Button android:id="@+id/testSmsButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/send_test_emergency_sms"/>
-<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/appearance" android:textStyle="bold" android:textSize="20sp" android:layout_marginTop="12dp"/>
-<RadioGroup android:id="@+id/themeGroup" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"><RadioButton android:id="@+id/themeSystem" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="@string/theme_system"/><RadioButton android:id="@+id/themeLight" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="@string/theme_light"/><RadioButton android:id="@+id/themeDark" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="@string/theme_dark"/></RadioGroup>
-</LinearLayout>
-</FrameLayout></ScrollView></LinearLayout>
