@@ -1,1 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?><resources><style name="Theme.VisionEx" parent="Theme.MaterialComponents.DayNight.NoActionBar"><item name="colorPrimary">@color/visionex_primary</item><item name="colorPrimaryVariant">@color/visionex_primary_dark</item><item name="colorSecondary">@color/visionex_accent</item><item name="android:fontFamily">sans</item></style></resources>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.VisionEx" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/visionex_primary</item>
+        <item name="colorPrimaryVariant">@color/visionex_primary_dark</item>
+        <item name="colorSecondary">@color/visionex_accent</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="android:colorBackground">@color/app_background</item>
+        <item name="android:statusBarColor">@color/app_background</item>
+        <item name="android:navigationBarColor">@color/app_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>
