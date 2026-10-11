@@ -1,3 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?><resources>
-<color name="visionex_primary">#1F2937</color><color name="visionex_primary_dark">#111827</color><color name="visionex_accent">#2563EB</color><color name="visionex_ok">#15803D</color><color name="visionex_warning">#B91C1C</color><color name="white">#FFFFFF</color><color name="text_primary">#111827</color><color name="surface">#F8FAFC</color>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="visionex_primary">#142338</color>
+    <color name="visionex_primary_dark">#0B1726</color>
+    <color name="visionex_accent">#109DA4</color>
+    <color name="visionex_ok">#117A63</color>
+    <color name="visionex_warning">#D64055</color>
+    <color name="visionex_ok_soft">#E4F6F0</color>
+    <color name="visionex_warning_soft">#FCE9EC</color>
+    <color name="white">#FFFFFF</color>
+    <color name="text_primary">#142338</color>
+    <color name="text_secondary">#68788B</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="app_background">#F3F6FA</color>
+    <color name="card_stroke">#E1E8F0</color>
+    <color name="metric_background">#F1F5F9</color>
 </resources>
