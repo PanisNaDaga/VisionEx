@@ -1,0 +1,74 @@
+name: Publish VisionEx Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish
+        required: true
+        type: choice
+        options:
+          - "0.0.1"
+          - "0.0.2"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build APK and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out selected version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version == '0.0.1' && 'version-0.0.1' || 'version-0.0.2' }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 35 build tools
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean assembleDebug
+
+      - name: Name release APK
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/VisionEx-v${{ inputs.version }}-debug.apk"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: VisionEx v${{ inputs.version }}
+          target_commitish: ${{ inputs.version == '0.0.1' && 'version-0.0.1' || 'version-0.0.2' }}
+          body: |
+            ## VisionEx v${{ inputs.version }}
+
+            Android prototype for the VisionEx smart glasses driver drowsiness monitoring system.
+
+            ### Build
+            - Installable debug APK for testing.
+            - Includes the source code at the selected version tag.
+
+            ### Notes
+            - This is a prototype build, not a production-ready safety device.
+            - Bluetooth hardware behavior depends on compatible VisionEx firmware.
+            - Direct SMS delivery depends on Android permissions, the SIM, and carrier support.
+          files: app/build/outputs/apk/debug/VisionEx-v${{ inputs.version }}-debug.apk
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ inputs.version == '0.0.1' }}
