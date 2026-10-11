@@ -103,9 +103,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTab(position: Int) {
-        binding.homeSection.visibility = if (position == 0) View.VISIBLE else View.GONE
-        binding.historySection.visibility = if (position == 1) View.VISIBLE else View.GONE
-        binding.settingsSection.visibility = if (position == 2) View.VISIBLE else View.GONE
+        val target = when (position) {
+            1 -> binding.historySection
+            2 -> binding.settingsSection
+            else -> binding.homeSection
+        }
+        val sections = listOf(binding.homeSection, binding.historySection, binding.settingsSection)
+
+        sections.filter { it != target }.forEach { section ->
+            section.animate().cancel()
+            section.visibility = View.GONE
+            section.alpha = 1f
+            section.translationY = 0f
+        }
+
+        if (target.visibility != View.VISIBLE) {
+            target.alpha = 0f
+            target.translationY = 8f
+            target.visibility = View.VISIBLE
+            target.animate().alpha(1f).translationY(0f).setDuration(220).start()
+        }
     }
 
     private fun restoreSettings() {
@@ -143,6 +160,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         binding.applyVibrationButton.setOnClickListener {
+            animateTap(it)
             val strength = binding.vibrationSeekBar.progress
             prefs.edit { putInt("vibration_strength", strength) }
             ble.sendCommand("VIBRATION:" + strength)
@@ -181,11 +199,27 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
         }
 
+    private fun animateTap(view: View) {
+        view.animate().cancel()
+        view.scaleX = 1f
+        view.scaleY = 1f
+        view.animate()
+            .scaleX(0.97f)
+            .scaleY(0.97f)
+            .setDuration(80)
+            .withEndAction {
+                view.animate().scaleX(1f).scaleY(1f).setDuration(130).start()
+            }
+            .start()
+    }
+
     private fun setupActions() {
         binding.connectButton.setOnClickListener {
+            animateTap(it)
             if (hasBle()) ble.scanAndConnect() else requestPermissionsNow()
         }
         binding.ackButton.setOnClickListener {
+            animateTap(it)
             alerts = 0
             prefs.edit { putInt("alerts", 0) }
             setNormal()
@@ -193,12 +227,17 @@ class MainActivity : AppCompatActivity() {
             ble.sendCommand("ACK")
             addEvent("Alert acknowledged")
         }
-        binding.simulateButton.setOnClickListener { handleMessage("DROWSY") }
+        binding.simulateButton.setOnClickListener {
+            animateTap(it)
+            handleMessage("DROWSY")
+        }
         binding.clearHistoryButton.setOnClickListener {
+            animateTap(it)
             prefs.edit { remove("history") }
             renderHistory()
         }
         binding.testSmsButton.setOnClickListener {
+            animateTap(it)
             saveContact()
             sendEmergency(true)
         }
@@ -254,6 +293,16 @@ class MainActivity : AppCompatActivity() {
     private fun drowsy() {
         binding.drowsinessText.text = getString(R.string.drowsiness_detected)
         binding.drowsinessText.setTextColor(ContextCompat.getColor(this, R.color.visionex_warning))
+        binding.drowsinessText.setBackgroundResource(R.drawable.status_pill_warning)
+        binding.statusHelperText.text = getString(R.string.status_drowsy_hint)
+        binding.statusCard.setStrokeColor(ContextCompat.getColor(this, R.color.visionex_warning))
+        binding.drowsinessText.animate().cancel()
+        binding.drowsinessText.alpha = 0.75f
+        binding.drowsinessText.scaleX = 0.96f
+        binding.drowsinessText.scaleY = 0.96f
+        binding.drowsinessText.animate()
+            .alpha(1f).scaleX(1f).scaleY(1f)
+            .setDuration(260).start()
         alerts++
         prefs.edit { putInt("alerts", alerts) }
         updateAlerts()
@@ -264,6 +313,13 @@ class MainActivity : AppCompatActivity() {
     private fun setNormal() {
         binding.drowsinessText.text = getString(R.string.normal)
         binding.drowsinessText.setTextColor(ContextCompat.getColor(this, R.color.visionex_ok))
+        binding.drowsinessText.setBackgroundResource(R.drawable.status_pill_normal)
+        binding.statusHelperText.text = getString(R.string.status_normal_hint)
+        binding.statusCard.setStrokeColor(ContextCompat.getColor(this, R.color.card_stroke))
+        binding.drowsinessText.animate().cancel()
+        binding.drowsinessText.alpha = 1f
+        binding.drowsinessText.scaleX = 1f
+        binding.drowsinessText.scaleY = 1f
     }
 
     private fun updateAlerts() {
