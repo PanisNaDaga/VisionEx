@@ -440,7 +440,15 @@
                             android:id="@+id/emergencyThresholdSeekBar"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:max="4" />
+                            android:max="19" />
+
+                        <TextView
+                            android:id="@+id/autoSmsCountText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
