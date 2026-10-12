@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Widget.VisionEx.Button" parent="Widget.MaterialComponents.Button">
+        <item name="android:textColor">@color/button_text</item>
+        <item name="backgroundTint">@color/button_background</item>
+        <item name="rippleColor">@color/visionex_accent</item>
+    </style>
+
+    <style name="Widget.VisionEx.Button.Outlined" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="android:textColor">@color/button_outline_text</item>
+        <item name="strokeColor">@color/visionex_accent</item>
+        <item name="rippleColor">@color/visionex_accent</item>
+    </style>
+</resources>
