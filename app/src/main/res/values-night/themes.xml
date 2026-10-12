@@ -4,6 +4,9 @@
         <item name="colorPrimary">@color/visionex_primary</item>
         <item name="colorPrimaryVariant">@color/visionex_primary_dark</item>
         <item name="colorSecondary">@color/visionex_accent</item>
+        <item name="colorOnPrimary">@color/button_text</item>
+        <item name="materialButtonStyle">@style/Widget.VisionEx.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.VisionEx.Button.Outlined</item>
         <item name="colorSurface">@color/surface</item>
         <item name="android:colorBackground">@color/app_background</item>
         <item name="android:statusBarColor">@color/app_background</item>
