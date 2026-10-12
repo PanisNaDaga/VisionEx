@@ -14,4 +14,8 @@
     <color name="app_background">#F3F6FA</color>
     <color name="card_stroke">#E1E8F0</color>
     <color name="metric_background">#F1F5F9</color>
+
+    <color name="button_background">#087F85</color>
+    <color name="button_text">#FFFFFF</color>
+    <color name="button_outline_text">#087F85</color>
 </resources>
