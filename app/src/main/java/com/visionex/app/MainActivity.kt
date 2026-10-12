@@ -37,6 +37,8 @@ class MainActivity : AppCompatActivity() {
     private val location by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var alerts = 0
     private var emergencyThreshold = 3
+    private var autoSmsDetectionCount = 0
+    private var isCurrentlyDrowsy = false
     private var pendingSmsNumber: String? = null
     private var pendingSmsMessage: String? = null
 
@@ -135,9 +137,11 @@ class MainActivity : AppCompatActivity() {
         binding.vibrationSeekBar.progress = strength
         binding.vibrationStrengthText.text = getString(R.string.vibration_strength, strength)
 
-        emergencyThreshold = prefs.getInt("emergency_threshold", 3).coerceIn(1, 5)
+        emergencyThreshold = prefs.getInt("emergency_threshold", 3).coerceIn(1, 20)
         binding.emergencyThresholdSeekBar.progress = emergencyThreshold - 1
         binding.emergencyThresholdText.text = getString(R.string.emergency_threshold, emergencyThreshold)
+        autoSmsDetectionCount = prefs.getInt("auto_sms_detection_count", 0).coerceAtLeast(0)
+        updateAutoSmsProgress()
 
         alerts = prefs.getInt("alerts", 0)
 
@@ -157,6 +161,7 @@ class MainActivity : AppCompatActivity() {
             emergencyThreshold = value + 1
             prefs.edit { putInt("emergency_threshold", emergencyThreshold) }
             binding.emergencyThresholdText.text = getString(R.string.emergency_threshold, emergencyThreshold)
+            updateAutoSmsProgress()
         })
 
         binding.applyVibrationButton.setOnClickListener {
@@ -178,7 +183,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.autoSmsSwitch.setOnCheckedChangeListener { _, enabled ->
-            prefs.edit { putBoolean("auto_sms", enabled) }
+            autoSmsDetectionCount = 0
+            prefs.edit {
+                putBoolean("auto_sms", enabled)
+                putInt("auto_sms_detection_count", 0)
+            }
+            updateAutoSmsProgress()
         }
 
         binding.themeGroup.setOnCheckedChangeListener { _, checkedId ->
@@ -222,13 +232,14 @@ class MainActivity : AppCompatActivity() {
             animateTap(it)
             alerts = 0
             prefs.edit { putInt("alerts", 0) }
-            setNormal()
             updateAlerts()
             ble.sendCommand("ACK")
             addEvent("Alert acknowledged")
         }
         binding.simulateButton.setOnClickListener {
             animateTap(it)
+            // Each tap represents a separate simulated detection event.
+            isCurrentlyDrowsy = false
             handleMessage("DROWSY")
         }
         binding.clearHistoryButton.setOnClickListener {
@@ -291,6 +302,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun drowsy() {
+        // Count a change into the drowsy state, not every repeated BLE status update.
+        if (isCurrentlyDrowsy) return
+        isCurrentlyDrowsy = true
+
         binding.drowsinessText.text = getString(R.string.drowsiness_detected)
         binding.drowsinessText.setTextColor(ContextCompat.getColor(this, R.color.visionex_warning))
         binding.drowsinessText.setBackgroundResource(R.drawable.status_pill_warning)
@@ -307,10 +322,23 @@ class MainActivity : AppCompatActivity() {
         prefs.edit { putInt("alerts", alerts) }
         updateAlerts()
         addEvent("Drowsiness detected (alert " + alerts + ")")
-        if (binding.autoSmsSwitch.isChecked && alerts >= emergencyThreshold) sendEmergency(false)
+
+        if (binding.autoSmsSwitch.isChecked) {
+            autoSmsDetectionCount++
+            prefs.edit { putInt("auto_sms_detection_count", autoSmsDetectionCount) }
+            updateAutoSmsProgress()
+
+            if (autoSmsDetectionCount >= emergencyThreshold) {
+                autoSmsDetectionCount = 0
+                prefs.edit { putInt("auto_sms_detection_count", 0) }
+                updateAutoSmsProgress()
+                sendEmergency(false)
+            }
+        }
     }
 
     private fun setNormal() {
+        isCurrentlyDrowsy = false
         binding.drowsinessText.text = getString(R.string.normal)
         binding.drowsinessText.setTextColor(ContextCompat.getColor(this, R.color.visionex_ok))
         binding.drowsinessText.setBackgroundResource(R.drawable.status_pill_normal)
@@ -326,6 +354,15 @@ class MainActivity : AppCompatActivity() {
         binding.alertCountText.text = getString(R.string.unacknowledged_alerts, alerts)
     }
 
+    private fun updateAutoSmsProgress() {
+        if (!::binding.isInitialized) return
+        binding.autoSmsCountText.text = getString(
+            R.string.auto_sms_progress,
+            autoSmsDetectionCount,
+            emergencyThreshold
+        )
+    }
+
     private fun saveContact() {
         prefs.edit { putString("emergency_contact", binding.contactInput.text.toString().trim()) }
     }
@@ -337,31 +374,36 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.enter_emergency_contact, Toast.LENGTH_SHORT).show()
             return
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissionsNow()
-            Toast.makeText(this, R.string.location_permission_required, Toast.LENGTH_SHORT).show()
-            return
+
+        val messageStart = if (test) {
+            "VISIONEX TEST: Emergency notification test."
+        } else {
+            "VISIONEX ALERT: Drowsiness was detected $emergencyThreshold times. Please check on the driver."
         }
 
-        location.lastLocation.addOnSuccessListener { loc ->
-            val start = if (test) "VISIONEX TEST: Emergency notification test."
-            else "VISIONEX ALERT: Repeated drowsiness alerts were not acknowledged."
-            val where = if (loc != null)
-                " Last known location: https://maps.google.com/?q=" + loc.latitude + "," + loc.longitude
-            else " Last known location is unavailable."
-            sendSms(number, start + where)
-            addEvent(if (test) "Test emergency SMS sent" else "Emergency SMS sent")
-            if (!test) {
-                alerts = 0
-                prefs.edit { putInt("alerts", 0) }
-                updateAlerts()
+        val dispatchMessage: (android.location.Location?) -> Unit = { loc ->
+            val locationText = if (loc != null) {
+                " Last known location: https://maps.google.com/?q=${loc.latitude},${loc.longitude}"
+            } else {
+                " Driver location is unavailable."
             }
-        }.addOnFailureListener {
-            sendSms(
-                number,
-                if (test) "VISIONEX TEST: Emergency notification test. Location unavailable."
-                else "VISIONEX ALERT: Repeated drowsiness alerts were not acknowledged. Location unavailable."
+            sendSms(number, messageStart + locationText)
+            addEvent(
+                if (test) "Test emergency SMS requested"
+                else "Automatic SMS requested after $emergencyThreshold drowsiness detections"
             )
+        }
+
+        // Do not block the emergency message if the driver denied location permission.
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            location.lastLocation
+                .addOnSuccessListener { loc -> dispatchMessage(loc) }
+                .addOnFailureListener { dispatchMessage(null) }
+        } else {
+            dispatchMessage(null)
         }
     }
 
