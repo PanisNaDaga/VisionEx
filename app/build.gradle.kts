@@ -75,7 +75,7 @@ val prepareVisionExEyeModel by tasks.registering {
 
 android {
     namespace = "com.visionex.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.visionex.app"
