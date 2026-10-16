@@ -28,7 +28,7 @@ Use a physical phone because BLE and SMS are not fully testable in the standard 
 Automatic emergency SMS is OFF by default. Test only with a consenting recipient. Do not perform induced-drowsiness testing on public roads.
 
 
-## Version 0.0.3 camera testing
+## Version 0.0.4 camera testing and alert fixes
 
 The Camera tab adds a CameraX live preview with front/back camera selection. It can analyze frames using a YOLO open/closed-eye detector, calculate PERCLOS over a sliding observation window, and apply a continuous-eye-closure microsleep override. Default test settings are a 60-second PERCLOS window, a 60% PERCLOS threshold, and a 2-second microsleep threshold. These can be adjusted in the Camera tab.
 
@@ -43,3 +43,11 @@ The Camera tab includes a selector for which YOLO output class represents closed
 ### Safety and limitations
 
 Use camera testing while the vehicle is parked. Do not deliberately induce drowsiness or perform eye-closure tests while driving. Front camera is the intended phone-camera option for a driver-facing test; the back camera is included for comparison and general testing. CameraX, YOLO detections, PERCLOS, and microsleep thresholds are experimental research functions and must be validated on the target phone before reporting measured accuracy or response time. The app is not a certified driver-safety system.
+
+
+## Version 0.0.4 patch notes
+
+- Kept the camera integration test tab from v0.0.3, including front/back camera selection, CameraX preview, YOLO eye-state analysis, PERCLOS settings, and a configurable continuous-eye-closure override.
+- Fixed alert acknowledgment so the app resets the unacknowledged alert count and live status, subject to new incoming detections.
+- Fixed automatic SMS counting so it uses the same unacknowledged-alert count shown in the app, preventing an old separate counter from triggering a stale SMS after acknowledgment.
+- Set the Android app version to 0.0.4 (version code 4).
