@@ -132,6 +132,17 @@ class CameraDrowsinessManager(
         perclosWindowSeconds = windowSeconds.coerceIn(10, 60)
         perclosThresholdPercent = perclosThreshold.coerceIn(20, 80)
         microsleepThresholdSeconds = microsleepSeconds.coerceIn(1, 5)
+        if (!yolo || (!perclos && !microsleep)) {
+            synchronized(temporalLock) {
+                samples.clear()
+                closedSinceMs = null
+                firstAnalysisTimeMs = 0L
+                if (reportedDrowsy) {
+                    reportedDrowsy = false
+                    postDrowsinessChanged(false)
+                }
+            }
+        }
     }
 
     fun downloadOrLoadModel() {
@@ -355,6 +366,7 @@ class CameraDrowsinessManager(
             val cutoff = now - perclosWindowSeconds * 1000L
             while (samples.isNotEmpty() && samples.first.timeMs < cutoff) samples.removeFirst()
             val valid = samples.filter { it.closed != null }
+            val validCoverageEnough = valid.size >= max(10, perclosWindowSeconds * 2)
             if (valid.isNotEmpty()) {
                 perclos = valid.count { it.closed == true }.toFloat() / valid.size * 100f
             }
@@ -362,7 +374,7 @@ class CameraDrowsinessManager(
                 now - firstAnalysisTimeMs >= perclosWindowSeconds * 1000L
             val microsleepTriggered = microsleepEnabled &&
                 closureSeconds >= microsleepThresholdSeconds.toFloat()
-            val perclosTriggered = perclosEnabled && fullWindowObserved &&
+            val perclosTriggered = perclosEnabled && fullWindowObserved && validCoverageEnough &&
                 perclos != null && perclos!! >= perclosThresholdPercent.toFloat()
             val drowsyNow = microsleepTriggered || perclosTriggered
             if (drowsyNow != reportedDrowsy) {
