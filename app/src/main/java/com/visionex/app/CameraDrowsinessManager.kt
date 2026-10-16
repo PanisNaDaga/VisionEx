@@ -158,8 +158,19 @@ class CameraDrowsinessManager(
                     modelReady = false
                     val tempFile = File(context.filesDir, "$MODEL_FILE_NAME.download")
                     tempFile.delete()
-                    postStatus("Downloading the trained eye model (about 12 MB)...")
-                    downloadModel(tempFile)
+                    val copiedBundledModel = try {
+                        context.assets.open(MODEL_FILE_NAME).use { input ->
+                            FileOutputStream(tempFile).use { output -> input.copyTo(output) }
+                        }
+                        postStatus("Copying the trained YOLO model bundled in this APK...")
+                        true
+                    } catch (_: java.io.FileNotFoundException) {
+                        false
+                    }
+                    if (!copiedBundledModel) {
+                        postStatus("Downloading the trained eye model (about 12 MB)...")
+                        downloadModel(tempFile)
+                    }
                     val downloadedHash = sha256(tempFile)
                     if (!downloadedHash.equals(MODEL_SHA256, ignoreCase = true)) {
                         tempFile.delete()
