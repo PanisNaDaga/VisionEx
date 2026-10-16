@@ -261,7 +261,7 @@ class CameraDrowsinessManager(
                 cameraRunning = true
                 synchronized(temporalLock) {
                     samples.clear()
-                    firstAnalysisTimeMs = System.currentTimeMillis()
+                    firstAnalysisTimeMs = 0L
                     lastAnalysisTimeMs = 0L
                     closedSinceMs = null
                 }
@@ -339,6 +339,7 @@ class CameraDrowsinessManager(
         var closureSeconds = 0f
         var shouldReportDrowsy: Boolean? = null
         synchronized(temporalLock) {
+            if (firstAnalysisTimeMs == 0L) firstAnalysisTimeMs = now
             if (state == EyeState.CLOSED) {
                 if (closedSinceMs == null) closedSinceMs = now
             } else {
@@ -451,7 +452,10 @@ class CameraDrowsinessManager(
                         bestOpen = max(bestOpen, score)
                     }
                 }
-                val filtered = nonMaximumSuppression(candidates, 0.45f)
+                val filtered = nonMaximumSuppression(
+                    candidates.sortedByDescending { it.score }.take(300),
+                    0.45f
+                )
                 if (filtered.isEmpty()) return Pair(EyeState.UNKNOWN, 0f)
                 val closedCount = filtered.count { it.classIndex == closedClass }
                 val openCount = filtered.count { it.classIndex != closedClass }
