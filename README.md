@@ -34,7 +34,7 @@ The Camera tab adds a CameraX live preview with front/back camera selection. It 
 
 ### Trained eye model
 
-The app downloads the ONNX model the first time **Download / load trained YOLO model** is pressed. It stores the file in the app's private data directory and checks its SHA-256 before loading it. Internet access is required for the initial model download; after a successful download it can run locally without network access. The model file is not bundled in the source repository or APK by default.
+Gradle downloads the ONNX model during the first Android build, verifies its SHA-256 checksum, and packages it into the APK under `app/src/main/assets/visionex_open_closed_eye.onnx`. The first time **Download / load trained YOLO model** is pressed, the app copies that bundled model into its private data directory and verifies it again before opening it. Internet access is required when building the APK if the model asset is not already cached locally; the installed app can then run the camera model without downloading the weights on first use.
 
 Model source: [MichalMlodawski/open-closed-eye-detection](https://huggingface.co/MichalMlodawski/open-closed-eye-detection), an open/closed-eye YOLOv8 model published under **CC BY-NC-SA 4.0**. Give attribution when redistributing and observe the non-commercial and share-alike conditions. Review the model card before any use beyond non-commercial research.
 
