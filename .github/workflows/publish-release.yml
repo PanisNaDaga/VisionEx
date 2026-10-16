@@ -10,6 +10,8 @@ on:
         options:
           - "0.0.1"
           - "0.0.2"
+          - "0.0.3"
+          - "0.0.4"
 
 permissions:
   contents: write
@@ -23,7 +25,7 @@ jobs:
       - name: Check out selected version
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.version == '0.0.1' && 'version-0.0.1' || 'version-0.0.2' }}
+          ref: ${{ format('version-{0}', inputs.version) }}
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -31,11 +33,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android 35 build tools
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK components
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "Android SDK manager was not found under $ANDROID_HOME"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -54,7 +60,7 @@ jobs:
         with:
           tag_name: v${{ inputs.version }}
           name: VisionEx v${{ inputs.version }}
-          target_commitish: ${{ inputs.version == '0.0.1' && 'version-0.0.1' || 'version-0.0.2' }}
+          target_commitish: ${{ format('version-{0}', inputs.version) }}
           body: |
             ## VisionEx v${{ inputs.version }}
 
