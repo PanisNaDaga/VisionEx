@@ -433,7 +433,7 @@ class CameraDrowsinessManager(
         )
         try {
             session.run(mapOf(inputName to inputTensor)).use { outputs ->
-                val output = outputs[0].value as OnnxTensor
+                val output = outputs[0] as OnnxTensor
                 val info = output.info as TensorInfo
                 val shape = info.shape
                 if (shape.size != 3) return Pair(EyeState.UNKNOWN, 0f)
