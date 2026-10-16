@@ -2,7 +2,7 @@
 <resources>
 <string name="app_name">VisionEx</string><string name="title_visionex">VISIONEX</string><string name="subtitle">Driver Drowsiness Monitoring</string>
 <string name="monitoring_overline">SMART DRIVER SAFETY</string><string name="device_link_title">Device connection</string><string name="device_link_hint">Connect your smart glasses to view live monitoring data.</string><string name="live_status_title">LIVE DRIVER STATUS</string><string name="status_normal_hint">No drowsiness alert detected. Keep your attention on the road.</string><string name="status_drowsy_hint">Drowsiness detected. Check the alert and respond safely.</string><string name="test_tools_title">Prototype testing</string><string name="test_tools_hint">Use this only to test the app interface and alert workflow.</string><string name="history_hint">Recent device events and app activity.</string><string name="settings_title">Settings</string><string name="settings_hint">Adjust your alert preferences and emergency contact.</string><string name="emergency_hint">Choose the contact that should receive an emergency notification.</string>
-<string name="tab_home">Home</string><string name="tab_history">History</string><string name="tab_settings">Settings</string>
+<string name="tab_home">Home</string><string name="tab_history">History</string><string name="tab_settings">Settings</string><string name="tab_camera">Camera</string>
 <string name="device">Device</string><string name="disconnected">Disconnected</string><string name="scan_for_visionex">Scan for VisionEx</string>
 <string name="current_status">Current Status</string><string name="battery_unknown">Battery: --%</string><string name="battery_percent">Battery: %1$s%%</string>
 <string name="unacknowledged_alerts">Unacknowledged alerts: %1$d</string><string name="acknowledge_alert">Acknowledge Alert</string>
@@ -10,11 +10,41 @@
 <string name="event_history">Event History</string><string name="clear_history">Clear History</string><string name="no_events_recorded">No events recorded.</string>
 <string name="alert_preferences">Alert Preferences</string><string name="vibration_enabled">Enable vibration alert</string><string name="buzzer_enabled">Enable audible buzzer</string>
 <string name="vibration_strength">Vibration strength: %1$d%%</string><string name="apply_vibration_strength">Apply Vibration Strength</string>
-<string name="emergency_threshold">Auto-send SMS after %1$d drowsiness event(s)</string><string name="auto_sms_progress">Drowsiness events counted: %1$d / %2$d</string><string name="emergency">Emergency</string><string name="emergency_contact_hint">Emergency contact number</string>
+<string name="emergency_threshold">Auto-send SMS after %1$d drowsiness event(s)</string><string name="auto_sms_progress">Unacknowledged alerts: %1$d / %2$d</string><string name="emergency">Emergency</string><string name="emergency_contact_hint">Emergency contact number</string>
 <string name="automatic_sms">Automatically attempt to send an SMS after the selected number of separate drowsiness events. If Android blocks direct sending, the messaging app may open for confirmation.</string><string name="send_test_emergency_sms">Send Test Emergency SMS</string>
 <string name="appearance">Appearance</string><string name="theme_system">System</string><string name="theme_light">Light</string><string name="theme_dark">Dark</string>
 <string name="nearby_permission_needed">Nearby-device permission is needed to connect to VisionEx.</string><string name="drowsiness_detected">DROWSINESS DETECTED</string><string name="normal">NORMAL</string>
 <string name="enter_emergency_contact">Enter an emergency contact first.</string><string name="sms_sent">SMS sent.</string><string name="sms_failed">SMS failed: %1$s</string>
 <string name="location_permission_required">Location permission is required for the emergency message.</string><string name="sms_opened">Emergency message prepared. Tap Send in your messaging app.</string>
 <string name="settings_sent">Settings sent to VisionEx.</string>
+<string name="camera_title">Camera Integration Test</string>
+<string name="camera_hint">Use this screen to test the phone camera and eye-state analysis while parked. Camera analysis is experimental and is not a replacement for the smart-glasses firmware.</string>
+<string name="camera_front">Front camera</string>
+<string name="camera_back">Back camera</string>
+<string name="camera_start">Start camera</string>
+<string name="camera_stop">Stop camera</string>
+<string name="camera_load_model">Download / load trained YOLO model</string>
+<string name="camera_model_waiting">YOLO model not loaded. Download it to enable eye detection.</string>
+<string name="camera_status_stopped">Camera stopped.</string>
+<string name="camera_status_permission">Camera permission is required for preview and analysis.</string>
+<string name="camera_model_license">Model: MichalMlodawski/open-closed-eye-detection. License: CC BY-NC-SA 4.0. Credit the author; use for non-commercial research only unless you have separate permission.</string>
+<string name="camera_yolo_enabled">Enable YOLO eye detection</string>
+<string name="camera_perclos_enabled">Enable PERCLOS check</string>
+<string name="camera_microsleep_enabled">Enable microsleep override</string>
+<string name="camera_confidence">YOLO confidence threshold: %1$d%%</string>
+<string name="camera_perclos_window">PERCLOS observation window: %1$d seconds</string>
+<string name="camera_perclos_threshold">PERCLOS trigger threshold: %1$d%%</string>
+<string name="camera_microsleep_threshold">Continuous eye closure trigger: %1$d seconds</string>
+<string name="camera_closed_class">Model class that means CLOSED eyes</string>
+<string name="camera_class_zero_closed">Class 0 = CLOSED</string>
+<string name="camera_class_one_closed">Class 1 = CLOSED</string>
+<string name="camera_metrics_waiting">Eye state: waiting for camera analysis.</string>
+<string name="camera_metrics_format">Eye state: %1$s | confidence: %2$d%% | PERCLOS: %3$s | continuous closure: %4$.1f s</string>
+<string name="camera_eye_unknown">UNKNOWN</string>
+<string name="camera_eye_open">OPEN</string>
+<string name="camera_eye_closed">CLOSED</string>
+<string name="camera_perclos_not_ready">warming up</string>
+<string name="camera_drowsy">CAMERA ANALYSIS: DROWSINESS CONDITION</string>
+<string name="camera_normal">CAMERA ANALYSIS: NO DROWSINESS CONDITION</string>
+<string name="camera_preview_note">For safe testing, use the front camera while stationary. Do not drive or deliberately close your eyes on public roads.</string>
 </resources>
