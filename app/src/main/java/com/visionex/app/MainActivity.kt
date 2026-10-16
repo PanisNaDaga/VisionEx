@@ -33,12 +33,18 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var ble: BleVisionExManager
+    private lateinit var cameraManager: CameraDrowsinessManager
     private val prefs by lazy { getSharedPreferences("visionex_prefs", MODE_PRIVATE) }
     private val location by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var alerts = 0
     private var emergencyThreshold = 3
-    private var autoSmsDetectionCount = 0
     private var isCurrentlyDrowsy = false
+    private var bleDrowsy = false
+    private var cameraDrowsy = false
+    private var simulatedDrowsy = false
+    private var bleDrowsyAcknowledged = false
+    private var cameraDrowsyAcknowledged = false
+    private var simulatedDrowsyAcknowledged = false
     private var pendingSmsNumber: String? = null
     private var pendingSmsMessage: String? = null
 
@@ -66,6 +72,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startSelectedCamera()
+        else Snackbar.make(binding.root, R.string.camera_status_permission, Snackbar.LENGTH_LONG).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         applySavedTheme()
         super.onCreate(savedInstanceState)
@@ -75,13 +88,54 @@ class MainActivity : AppCompatActivity() {
         ble = BleVisionExManager(
             this,
             { runOnUiThread { binding.connectionText.text = it } },
-            { runOnUiThread { handleMessage(it.trim()) } }
+            { runOnUiThread { handleDeviceMessage(it.trim()) } }
+        )
+
+        cameraManager = CameraDrowsinessManager(
+            context = this,
+            lifecycleOwner = this,
+            previewView = binding.cameraPreview,
+            onStatus = { binding.cameraModelStatusText.text = it },
+            onMetrics = { metrics ->
+                val stateLabel = when (metrics.eyeState) {
+                    EyeState.OPEN -> getString(R.string.camera_eye_open)
+                    EyeState.CLOSED -> getString(R.string.camera_eye_closed)
+                    EyeState.UNKNOWN -> getString(R.string.camera_eye_unknown)
+                }
+                val perclosLabel = metrics.perclosPercent?.let {
+                    String.format(Locale.US, "%.1f%%", it)
+                } ?: getString(R.string.camera_perclos_not_ready)
+                binding.cameraMetricsText.text = getString(
+                    R.string.camera_metrics_format,
+                    stateLabel,
+                    (metrics.confidence * 100f).toInt(),
+                    perclosLabel,
+                    metrics.closedDurationSeconds
+                )
+                binding.cameraDrowsyText.text = getString(
+                    if (metrics.drowsy) R.string.camera_drowsy else R.string.camera_normal
+                )
+                binding.cameraDrowsyText.setTextColor(
+                    ContextCompat.getColor(
+                        this,
+                        if (metrics.drowsy) R.color.visionex_warning else R.color.visionex_ok
+                    )
+                )
+            },
+            onDrowsinessChanged = { detected ->
+                if (cameraDrowsy != detected) {
+                    cameraDrowsy = detected
+                    cameraDrowsyAcknowledged = false
+                    refreshCombinedDrowsinessStatus()
+                }
+            }
         )
 
         setupTabs()
         restoreSettings()
         setupSettingsControls()
         setupActions()
+        setupCameraControls()
         updateAlerts()
         renderHistory()
         ContextCompat.registerReceiver(
@@ -97,6 +151,7 @@ class MainActivity : AppCompatActivity() {
         binding.tabLayout.addTab(binding.tabLayout.newTab().setText(R.string.tab_home))
         binding.tabLayout.addTab(binding.tabLayout.newTab().setText(R.string.tab_history))
         binding.tabLayout.addTab(binding.tabLayout.newTab().setText(R.string.tab_settings))
+        binding.tabLayout.addTab(binding.tabLayout.newTab().setText(R.string.tab_camera))
         binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) = showTab(tab.position)
             override fun onTabUnselected(tab: TabLayout.Tab) = Unit
@@ -108,9 +163,19 @@ class MainActivity : AppCompatActivity() {
         val target = when (position) {
             1 -> binding.historySection
             2 -> binding.settingsSection
+            3 -> binding.cameraSection
             else -> binding.homeSection
         }
-        val sections = listOf(binding.homeSection, binding.historySection, binding.settingsSection)
+        val sections = listOf(
+            binding.homeSection,
+            binding.historySection,
+            binding.settingsSection,
+            binding.cameraSection
+        )
+        if (target != binding.cameraSection && cameraManager.isCameraRunning()) {
+            cameraManager.stopCamera()
+            binding.cameraStartButton.text = getString(R.string.camera_start)
+        }
 
         sections.filter { it != target }.forEach { section ->
             section.animate().cancel()
@@ -140,10 +205,10 @@ class MainActivity : AppCompatActivity() {
         emergencyThreshold = prefs.getInt("emergency_threshold", 3).coerceIn(1, 20)
         binding.emergencyThresholdSeekBar.progress = emergencyThreshold - 1
         binding.emergencyThresholdText.text = getString(R.string.emergency_threshold, emergencyThreshold)
-        autoSmsDetectionCount = prefs.getInt("auto_sms_detection_count", 0).coerceAtLeast(0)
-        updateAutoSmsProgress()
 
         alerts = prefs.getInt("alerts", 0)
+        updateAlerts()
+        updateAutoSmsProgress()
 
         when (prefs.getString("theme", "system")) {
             "light" -> binding.themeLight.isChecked = true
@@ -183,11 +248,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.autoSmsSwitch.setOnCheckedChangeListener { _, enabled ->
-            autoSmsDetectionCount = 0
-            prefs.edit {
-                putBoolean("auto_sms", enabled)
-                putInt("auto_sms_detection_count", 0)
-            }
+            prefs.edit { putBoolean("auto_sms", enabled) }
             updateAutoSmsProgress()
         }
 
@@ -200,6 +261,105 @@ class MainActivity : AppCompatActivity() {
             prefs.edit { putString("theme", theme) }
             applyTheme(theme)
         }
+    }
+
+    private fun setupCameraControls() {
+        binding.cameraYoloSwitch.isChecked = prefs.getBoolean("camera_yolo_enabled", true)
+        binding.cameraPerclosSwitch.isChecked = prefs.getBoolean("camera_perclos_enabled", true)
+        binding.cameraMicrosleepSwitch.isChecked = prefs.getBoolean("camera_microsleep_enabled", true)
+        binding.cameraConfidenceSeekBar.progress = prefs.getInt("camera_confidence", 40).coerceIn(0, 80)
+        binding.cameraPerclosWindowSeekBar.progress = prefs.getInt("camera_perclos_window", 50).coerceIn(0, 50)
+        binding.cameraPerclosThresholdSeekBar.progress = prefs.getInt("camera_perclos_threshold", 40).coerceIn(0, 60)
+        binding.cameraMicrosleepSeekBar.progress = prefs.getInt("camera_microsleep", 1).coerceIn(0, 4)
+        val frontCamera = prefs.getBoolean("camera_front", true)
+        binding.cameraFacingGroup.check(if (frontCamera) R.id.cameraFrontRadio else R.id.cameraBackRadio)
+        val closedClass = prefs.getInt("camera_closed_class", 0).coerceIn(0, 1)
+        binding.cameraClosedClassGroup.check(
+            if (closedClass == 0) R.id.cameraClassZeroClosedRadio else R.id.cameraClassOneClosedRadio
+        )
+
+        listOf(
+            binding.cameraYoloSwitch,
+            binding.cameraPerclosSwitch,
+            binding.cameraMicrosleepSwitch
+        ).forEach { control ->
+            control.setOnCheckedChangeListener { _, _ -> applyCameraOptions() }
+        }
+        binding.cameraConfidenceSeekBar.setOnSeekBarChangeListener(simpleSeekListener { applyCameraOptions() })
+        binding.cameraPerclosWindowSeekBar.setOnSeekBarChangeListener(simpleSeekListener { applyCameraOptions() })
+        binding.cameraPerclosThresholdSeekBar.setOnSeekBarChangeListener(simpleSeekListener { applyCameraOptions() })
+        binding.cameraMicrosleepSeekBar.setOnSeekBarChangeListener(simpleSeekListener { applyCameraOptions() })
+        binding.cameraClosedClassGroup.setOnCheckedChangeListener { _, _ -> applyCameraOptions() }
+        binding.cameraFacingGroup.setOnCheckedChangeListener { _, _ ->
+            applyCameraOptions()
+            if (cameraManager.isCameraRunning()) startSelectedCamera()
+        }
+        binding.cameraModelButton.setOnClickListener {
+            animateTap(it)
+            cameraManager.downloadOrLoadModel()
+        }
+        binding.cameraStartButton.setOnClickListener {
+            animateTap(it)
+            if (cameraManager.isCameraRunning()) {
+                cameraManager.stopCamera()
+                binding.cameraStartButton.text = getString(R.string.camera_start)
+            } else startSelectedCamera()
+        }
+        applyCameraOptions()
+    }
+
+    private fun applyCameraOptions() {
+        val confidence = (binding.cameraConfidenceSeekBar.progress + 10) / 100f
+        val windowSeconds = binding.cameraPerclosWindowSeekBar.progress + 10
+        val perclosThreshold = binding.cameraPerclosThresholdSeekBar.progress + 20
+        val microsleepSeconds = binding.cameraMicrosleepSeekBar.progress + 1
+        val closedClassIndex = if (binding.cameraClassZeroClosedRadio.isChecked) 0 else 1
+        val frontCamera = binding.cameraFrontRadio.isChecked
+
+        binding.cameraConfidenceText.text = getString(
+            R.string.camera_confidence, (confidence * 100f).toInt()
+        )
+        binding.cameraPerclosWindowText.text = getString(R.string.camera_perclos_window, windowSeconds)
+        binding.cameraPerclosThresholdText.text = getString(
+            R.string.camera_perclos_threshold, perclosThreshold
+        )
+        binding.cameraMicrosleepThresholdText.text = getString(
+            R.string.camera_microsleep_threshold, microsleepSeconds
+        )
+
+        prefs.edit {
+            putBoolean("camera_yolo_enabled", binding.cameraYoloSwitch.isChecked)
+            putBoolean("camera_perclos_enabled", binding.cameraPerclosSwitch.isChecked)
+            putBoolean("camera_microsleep_enabled", binding.cameraMicrosleepSwitch.isChecked)
+            putInt("camera_confidence", binding.cameraConfidenceSeekBar.progress)
+            putInt("camera_perclos_window", binding.cameraPerclosWindowSeekBar.progress)
+            putInt("camera_perclos_threshold", binding.cameraPerclosThresholdSeekBar.progress)
+            putInt("camera_microsleep", binding.cameraMicrosleepSeekBar.progress)
+            putInt("camera_closed_class", closedClassIndex)
+            putBoolean("camera_front", frontCamera)
+        }
+        cameraManager.setOptions(
+            yolo = binding.cameraYoloSwitch.isChecked,
+            perclos = binding.cameraPerclosSwitch.isChecked,
+            microsleep = binding.cameraMicrosleepSwitch.isChecked,
+            confidence = confidence,
+            closedClassIndex = closedClassIndex,
+            windowSeconds = windowSeconds,
+            perclosThreshold = perclosThreshold,
+            microsleepSeconds = microsleepSeconds
+        )
+    }
+
+    private fun startSelectedCamera() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            return
+        }
+        applyCameraOptions()
+        cameraManager.startCamera(binding.cameraFrontRadio.isChecked)
+        binding.cameraStartButton.text = getString(R.string.camera_stop)
     }
 
     private fun simpleSeekListener(onChanged: (Int) -> Unit) =
@@ -231,16 +391,26 @@ class MainActivity : AppCompatActivity() {
         binding.ackButton.setOnClickListener {
             animateTap(it)
             alerts = 0
-            prefs.edit { putInt("alerts", 0) }
+            prefs.edit {
+                putInt("alerts", 0)
+                remove("auto_sms_detection_count")
+            }
+            if (bleDrowsy) bleDrowsyAcknowledged = true
+            if (cameraDrowsy) cameraDrowsyAcknowledged = true
+            if (simulatedDrowsy) simulatedDrowsyAcknowledged = true
+            setNormal()
             updateAlerts()
+            updateAutoSmsProgress()
             ble.sendCommand("ACK")
             addEvent("Alert acknowledged")
         }
         binding.simulateButton.setOnClickListener {
             animateTap(it)
-            // Each tap represents a separate simulated detection event.
+            // Each tap is an explicit test event, independent of repeated BLE packets.
+            simulatedDrowsy = true
+            simulatedDrowsyAcknowledged = false
             isCurrentlyDrowsy = false
-            handleMessage("DROWSY")
+            refreshCombinedDrowsinessStatus()
         }
         binding.clearHistoryButton.setOnClickListener {
             animateTap(it)
@@ -256,6 +426,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         try { unregisterReceiver(smsSentReceiver) } catch (_: Exception) {}
+        try { cameraManager.close() } catch (_: Exception) {}
         ble.disconnect()
         super.onDestroy()
     }
@@ -290,15 +461,35 @@ class MainActivity : AppCompatActivity() {
             (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
              ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED)
 
-    private fun handleMessage(raw: String) {
-        val m = raw.uppercase(Locale.US)
+    private fun handleDeviceMessage(raw: String) {
+        val message = raw.uppercase(Locale.US)
         when {
-            m == "DROWSY" || m == "STATUS:DROWSY" || m == "ALERT:1" -> drowsy()
-            m == "NORMAL" || m == "STATUS:NORMAL" -> setNormal()
-            m.startsWith("BATTERY:") -> binding.batteryText.text =
-                getString(R.string.battery_percent, m.substringAfter(":").filter { it.isDigit() })
+            message == "DROWSY" || message == "STATUS:DROWSY" || message == "ALERT:1" -> {
+                if (!bleDrowsy) {
+                    bleDrowsy = true
+                    bleDrowsyAcknowledged = false
+                    refreshCombinedDrowsinessStatus()
+                }
+            }
+            message == "NORMAL" || message == "STATUS:NORMAL" -> {
+                if (bleDrowsy) {
+                    bleDrowsy = false
+                    bleDrowsyAcknowledged = false
+                    refreshCombinedDrowsinessStatus()
+                }
+            }
+            message.startsWith("BATTERY:") -> binding.batteryText.text =
+                getString(R.string.battery_percent, message.substringAfter(":").filter { it.isDigit() })
             else -> addEvent("Device: " + raw)
         }
+    }
+
+    private fun refreshCombinedDrowsinessStatus() {
+        val effectiveDrowsiness =
+            (bleDrowsy && !bleDrowsyAcknowledged) ||
+            (cameraDrowsy && !cameraDrowsyAcknowledged) ||
+            (simulatedDrowsy && !simulatedDrowsyAcknowledged)
+        if (effectiveDrowsiness) drowsy() else if (isCurrentlyDrowsy) setNormal()
     }
 
     private fun drowsy() {
@@ -323,16 +514,21 @@ class MainActivity : AppCompatActivity() {
         updateAlerts()
         addEvent("Drowsiness detected (alert " + alerts + ")")
 
-        if (binding.autoSmsSwitch.isChecked) {
-            autoSmsDetectionCount++
-            prefs.edit { putInt("auto_sms_detection_count", autoSmsDetectionCount) }
-            updateAutoSmsProgress()
-
-            if (autoSmsDetectionCount >= emergencyThreshold) {
-                autoSmsDetectionCount = 0
-                prefs.edit { putInt("auto_sms_detection_count", 0) }
+        updateAutoSmsProgress()
+        // Use one source of truth: the current unacknowledged-alert count.
+        if (binding.autoSmsSwitch.isChecked && alerts >= emergencyThreshold) {
+            val thresholdAtTrigger = emergencyThreshold
+            if (!binding.contactInput.text.isNullOrBlank()) {
+                alerts = 0
+                prefs.edit {
+                    putInt("alerts", 0)
+                    remove("auto_sms_detection_count")
+                }
+                updateAlerts()
                 updateAutoSmsProgress()
-                sendEmergency(false)
+                sendEmergency(false, thresholdAtTrigger)
+            } else {
+                Toast.makeText(this, R.string.enter_emergency_contact, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -358,7 +554,7 @@ class MainActivity : AppCompatActivity() {
         if (!::binding.isInitialized) return
         binding.autoSmsCountText.text = getString(
             R.string.auto_sms_progress,
-            autoSmsDetectionCount,
+            alerts,
             emergencyThreshold
         )
     }
@@ -367,7 +563,7 @@ class MainActivity : AppCompatActivity() {
         prefs.edit { putString("emergency_contact", binding.contactInput.text.toString().trim()) }
     }
 
-    private fun sendEmergency(test: Boolean) {
+    private fun sendEmergency(test: Boolean, triggeredAtCount: Int = emergencyThreshold) {
         saveContact()
         val number = normalizePhilippineNumber(binding.contactInput.text.toString())
         if (number.isBlank()) {
@@ -378,7 +574,7 @@ class MainActivity : AppCompatActivity() {
         val messageStart = if (test) {
             "VISIONEX TEST: Emergency notification test."
         } else {
-            "VISIONEX ALERT: Drowsiness was detected $emergencyThreshold times. Please check on the driver."
+            "VISIONEX ALERT: Drowsiness was detected $triggeredAtCount times. Please check on the driver."
         }
 
         val dispatchMessage: (android.location.Location?) -> Unit = { loc ->
@@ -390,7 +586,7 @@ class MainActivity : AppCompatActivity() {
             sendSms(number, messageStart + locationText)
             addEvent(
                 if (test) "Test emergency SMS requested"
-                else "Automatic SMS requested after $emergencyThreshold drowsiness detections"
+                else "Automatic SMS requested after $triggeredAtCount drowsiness detections"
             )
         }
 
