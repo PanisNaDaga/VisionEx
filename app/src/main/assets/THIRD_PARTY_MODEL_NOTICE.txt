@@ -1,0 +1,13 @@
+VISIONEX v0.0.3 THIRD-PARTY MODEL NOTICE
+
+Model: open-closed-eye-detection (YOLOv8 ONNX)
+Author: MichalMlodawski
+Source: https://huggingface.co/MichalMlodawski/open-closed-eye-detection
+License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
+
+The model is downloaded by Gradle during the Android build and bundled into the resulting APK after its SHA-256 checksum is verified. Model checksum:
+2f207282e996a6341f33e1471de77abc1d847d47c33cabe4e3a31490e7484d76
+
+Give appropriate attribution, do not use the model for commercial purposes without separate permission, and observe the share-alike requirements when sharing adaptations. Read the upstream model card and license before redistribution.
+
+This is a research/testing component. Its reported validation metrics do not guarantee its accuracy on every phone, camera position, lighting condition, or driver. Validate eye-state class mapping and performance locally while parked. It is not a certified driver-safety system.
