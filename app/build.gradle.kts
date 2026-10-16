@@ -30,6 +30,7 @@ fun visionExSha256(file: File): String {
 val prepareVisionExEyeModel by tasks.registering {
     inputs.property("expectedSha256", visionExEyeModelSha256)
     outputs.file(visionExEyeModelAsset)
+    outputs.upToDateWhen { false }
     doLast {
         if (visionExEyeModelAsset.exists() &&
             visionExSha256(visionExEyeModelAsset).equals(visionExEyeModelSha256, ignoreCase = true)
