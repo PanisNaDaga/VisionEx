@@ -2,22 +2,29 @@ package com.visionex.app
 
 import android.Manifest
 import android.content.Intent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.app.PendingIntent
-import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.os.Build
 import android.os.Bundle
-import android.telephony.SmsManager
-import android.telephony.SubscriptionManager
 import android.view.View
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.google.android.gms.location.LocationServices
@@ -34,7 +41,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var ble: BleVisionExManager
     private lateinit var cameraManager: CameraDrowsinessManager
-    private val prefs by lazy { getSharedPreferences("visionex_prefs", MODE_PRIVATE) }
+    private val authPrefs by lazy { getSharedPreferences("visionex_auth", MODE_PRIVATE) }
+    private val prefs by lazy {
+        val username = authPrefs.getString("current_user", "guest") ?: "guest"
+        val safeUsername = username.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+        getSharedPreferences("visionex_prefs_$safeUsername", MODE_PRIVATE)
+    }
     private val location by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var alerts = 0
     private var emergencyThreshold = 3
@@ -45,23 +57,14 @@ class MainActivity : AppCompatActivity() {
     private var bleDrowsyAcknowledged = false
     private var cameraDrowsyAcknowledged = false
     private var simulatedDrowsyAcknowledged = false
-    private var pendingSmsNumber: String? = null
-    private var pendingSmsMessage: String? = null
+    private val alertHandler = Handler(Looper.getMainLooper())
+    private var activeAlertTone: ToneGenerator? = null
+    private var toneReleaseRunnable: Runnable? = null
+    private var smsPreparedForCurrentAlertCycle = false
 
-    private val smsSentReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (resultCode) {
-                Activity.RESULT_OK -> {
-                    Toast.makeText(this@MainActivity, R.string.sms_sent, Toast.LENGTH_SHORT).show()
-                    addEvent("SMS accepted by Android/carrier")
-                }
-                SmsManager.RESULT_ERROR_NO_SERVICE -> smsFailure("No cellular service")
-                SmsManager.RESULT_ERROR_RADIO_OFF -> smsFailure("Cellular radio is off")
-                SmsManager.RESULT_ERROR_NULL_PDU -> smsFailure("Invalid SMS data")
-                SmsManager.RESULT_ERROR_GENERIC_FAILURE -> smsFailure("Carrier or SMS service rejected the message")
-                else -> smsFailure("SMS failed with code " + resultCode)
-            }
-        }
+    companion object {
+        private const val DROWSINESS_CHANNEL_ID = "visionex_drowsiness_alerts"
+        private const val DROWSINESS_NOTIFICATION_ID = 6201
     }
 
     private val launcher = registerForActivityResult(
@@ -80,14 +83,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        applySavedTheme()
+        val hasActiveSession = !getSharedPreferences("visionex_auth", MODE_PRIVATE)
+            .getString("current_user", null).isNullOrBlank()
+        if (hasActiveSession) applySavedTheme()
         super.onCreate(savedInstanceState)
+        if (!hasActiveSession) {
+            startActivity(Intent(this, AuthActivity::class.java))
+            finish()
+            return
+        }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        createDrowsinessNotificationChannel()
 
         ble = BleVisionExManager(
             this,
-            { runOnUiThread { binding.connectionText.text = it } },
+            { status ->
+                runOnUiThread {
+                    binding.connectionText.text = status
+                    if (status.equals("VISIONEX connected", ignoreCase = true)) {
+                        syncHardwareAlertSettings()
+                    }
+                }
+            },
             { runOnUiThread { handleDeviceMessage(it.trim()) } }
         )
 
@@ -138,12 +156,6 @@ class MainActivity : AppCompatActivity() {
         setupCameraControls()
         updateAlerts()
         renderHistory()
-        ContextCompat.registerReceiver(
-            this,
-            smsSentReceiver,
-            android.content.IntentFilter(packageName + ".SMS_SENT"),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
         requestPermissionsNow()
     }
 
@@ -398,11 +410,21 @@ class MainActivity : AppCompatActivity() {
             if (bleDrowsy) bleDrowsyAcknowledged = true
             if (cameraDrowsy) cameraDrowsyAcknowledged = true
             if (simulatedDrowsy) simulatedDrowsyAcknowledged = true
+            smsPreparedForCurrentAlertCycle = false
             setNormal()
             updateAlerts()
             updateAutoSmsProgress()
             ble.sendCommand("ACK")
+            ble.sendCommand("ALERT:0")
             addEvent("Alert acknowledged")
+        }
+        binding.logoutButton.setOnClickListener {
+            stopLocalAlerts()
+            cameraManager.stopCamera()
+            ble.disconnect()
+            authPrefs.edit { remove("current_user") }
+            startActivity(Intent(this, AuthActivity::class.java))
+            finish()
         }
         binding.simulateButton.setOnClickListener {
             animateTap(it)
@@ -425,14 +447,126 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        try { unregisterReceiver(smsSentReceiver) } catch (_: Exception) {}
+        stopLocalAlerts()
         try { cameraManager.close() } catch (_: Exception) {}
         ble.disconnect()
         super.onDestroy()
     }
 
+
+    private fun createDrowsinessNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                DROWSINESS_CHANNEL_ID,
+                "VisionEx Drowsiness Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications when VisionEx detects a potential drowsiness condition."
+                setSound(null, null)
+                enableVibration(false)
+            }
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .createNotificationChannel(channel)
+        }
+    }
+
+    private fun showDrowsinessNotification() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+
+        val openAppIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            6201,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, DROWSINESS_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("VISIONEX: Drowsiness detected")
+            .setContentText("A potential drowsiness condition was detected. Check the alert and respond safely.")
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(this).notify(DROWSINESS_NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+            // Local vibration and tone still work if notifications are not permitted.
+        }
+    }
+
+    private fun getSystemVibrator(): Vibrator {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            getSystemService(VibratorManager::class.java).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
+        }
+    }
+
+    private fun startLocalAlerts() {
+        val vibrationEnabled = prefs.getBoolean("vibration_enabled", true)
+        val buzzerEnabled = prefs.getBoolean("buzzer_enabled", true)
+
+        if (vibrationEnabled) {
+            val vibrator = getSystemVibrator()
+            if (vibrator.hasVibrator()) {
+                vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 300L, 150L, 300L, 150L, 350L), -1))
+            }
+        }
+
+        if (buzzerEnabled) {
+            stopAlertTone()
+            val tone = ToneGenerator(AudioManager.STREAM_ALARM, 90)
+            activeAlertTone = tone
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 1200)
+            val cleanup = Runnable {
+                if (activeAlertTone === tone) {
+                    tone.release()
+                    activeAlertTone = null
+                }
+                toneReleaseRunnable = null
+            }
+            toneReleaseRunnable = cleanup
+            alertHandler.postDelayed(cleanup, 1300L)
+        }
+
+        // The ESP32 firmware must understand ALERT:1 / ALERT:0 for glasses hardware alerts.
+        ble.sendCommand(if (vibrationEnabled || buzzerEnabled) "ALERT:1" else "ALERT:0")
+    }
+
+    private fun stopAlertTone() {
+        toneReleaseRunnable?.let { alertHandler.removeCallbacks(it) }
+        toneReleaseRunnable = null
+        activeAlertTone?.let { tone ->
+            try { tone.stopTone() } catch (_: Exception) {}
+            try { tone.release() } catch (_: Exception) {}
+        }
+        activeAlertTone = null
+    }
+
+    private fun stopLocalAlerts() {
+        try {
+            val vibrator = getSystemVibrator()
+            if (vibrator.hasVibrator()) vibrator.cancel()
+        } catch (_: Exception) {}
+        stopAlertTone()
+    }
+
+    private fun syncHardwareAlertSettings() {
+        ble.sendCommand("VIBRATION:" + prefs.getInt("vibration_strength", 70))
+        ble.sendCommand("VIBRATION_ENABLED:" + if (prefs.getBoolean("vibration_enabled", true)) "1" else "0")
+        ble.sendCommand("BUZZER_ENABLED:" + if (prefs.getBoolean("buzzer_enabled", true)) "1" else "0")
+    }
+
     private fun applySavedTheme() {
-        val saved = getSharedPreferences("visionex_prefs", MODE_PRIVATE).getString("theme", "system") ?: "system"
+        val saved = prefs.getString("theme", "system") ?: "system"
         applyTheme(saved)
     }
 
@@ -448,10 +582,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestPermissionsNow() {
-        val p = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.SEND_SMS)
+        val p = mutableListOf(Manifest.permission.ACCESS_FINE_LOCATION)
         if (Build.VERSION.SDK_INT >= 31) {
             p += Manifest.permission.BLUETOOTH_SCAN
             p += Manifest.permission.BLUETOOTH_CONNECT
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            p += Manifest.permission.POST_NOTIFICATIONS
         }
         launcher.launch(p.toTypedArray())
     }
@@ -493,9 +630,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun drowsy() {
-        // Count a change into the drowsy state, not every repeated BLE status update.
+        // Trigger alert outputs once when the combined state enters drowsiness.
         if (isCurrentlyDrowsy) return
         isCurrentlyDrowsy = true
+
+        startLocalAlerts()
+        showDrowsinessNotification()
+        val hardwareAlertEnabled =
+            prefs.getBoolean("vibration_enabled", true) ||
+            prefs.getBoolean("buzzer_enabled", true)
+        ble.sendCommand(if (hardwareAlertEnabled) "ALERT:1" else "ALERT:0")
 
         binding.drowsinessText.text = getString(R.string.drowsiness_detected)
         binding.drowsinessText.setTextColor(ContextCompat.getColor(this, R.color.visionex_warning))
@@ -516,16 +660,15 @@ class MainActivity : AppCompatActivity() {
 
         updateAutoSmsProgress()
         // Use one source of truth: the current unacknowledged-alert count.
-        if (binding.autoSmsSwitch.isChecked && alerts >= emergencyThreshold) {
+        if (binding.autoSmsSwitch.isChecked &&
+            alerts >= emergencyThreshold &&
+            !smsPreparedForCurrentAlertCycle
+        ) {
             val thresholdAtTrigger = emergencyThreshold
             if (!binding.contactInput.text.isNullOrBlank()) {
-                alerts = 0
-                prefs.edit {
-                    putInt("alerts", 0)
-                    remove("auto_sms_detection_count")
-                }
-                updateAlerts()
-                updateAutoSmsProgress()
+                // Android opens the SMS composer; the user must tap Send.
+                // Keep the unacknowledged alert count until the user acknowledges it.
+                smsPreparedForCurrentAlertCycle = true
                 sendEmergency(false, thresholdAtTrigger)
             } else {
                 Toast.makeText(this, R.string.enter_emergency_contact, Toast.LENGTH_SHORT).show()
@@ -535,6 +678,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setNormal() {
         isCurrentlyDrowsy = false
+        stopLocalAlerts()
+        ble.sendCommand("ALERT:0")
         binding.drowsinessText.text = getString(R.string.normal)
         binding.drowsinessText.setTextColor(ContextCompat.getColor(this, R.color.visionex_ok))
         binding.drowsinessText.setBackgroundResource(R.drawable.status_pill_normal)
@@ -583,14 +728,15 @@ class MainActivity : AppCompatActivity() {
             } else {
                 " Driver location is unavailable."
             }
-            sendSms(number, messageStart + locationText)
+            openSmsApp(number, messageStart + locationText)
             addEvent(
-                if (test) "Test emergency SMS requested"
-                else "Automatic SMS requested after $triggeredAtCount drowsiness detections"
+                if (test) "Test emergency SMS composer opened for manual sending"
+                else "Emergency SMS composer opened after $triggeredAtCount unacknowledged alert(s)"
             )
         }
 
-        // Do not block the emergency message if the driver denied location permission.
+        // The user always reviews and sends the SMS from the messaging app.
+        // Do not block the SMS draft if the driver denied location permission.
         if (ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
@@ -613,14 +759,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun smsFailure(reason: String) {
-        addEvent("SMS failed: " + reason)
-        Toast.makeText(this, "SMS failed: " + reason, Toast.LENGTH_LONG).show()
-        val number = pendingSmsNumber
-        val message = pendingSmsMessage
-        if (!number.isNullOrBlank() && message != null) openSmsApp(number, message)
-    }
-
     private fun openSmsApp(number: String, message: String) {
         try {
             startActivity(Intent(Intent.ACTION_SENDTO).apply {
@@ -630,48 +768,6 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.sms_opened, Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.sms_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun sendSms(number: String, message: String) {
-        pendingSmsNumber = number
-        pendingSmsMessage = message
-
-        val canSendDirectly = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.SEND_SMS
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (!canSendDirectly) {
-            addEvent("Direct SMS permission unavailable; opening messaging app")
-            openSmsApp(number, message)
-            return
-        }
-
-        try {
-            val defaultSubId = SubscriptionManager.getDefaultSmsSubscriptionId()
-            if (defaultSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                smsFailure("No default SMS SIM is selected")
-                return
-            }
-
-            val sm = if (Build.VERSION.SDK_INT >= 31) {
-                getSystemService(SmsManager::class.java).createForSubscriptionId(defaultSubId)
-            } else {
-                SmsManager.getSmsManagerForSubscriptionId(defaultSubId)
-            }
-
-            val sentIntent = PendingIntent.getBroadcast(
-                this,
-                1001,
-                Intent(packageName + ".SMS_SENT").setPackage(packageName),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            sm.sendTextMessage(number, null, message, sentIntent, null)
-            Toast.makeText(this, "Sending SMS...", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            smsFailure(e.message ?: "Unknown SMS error")
         }
     }
 
