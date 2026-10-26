@@ -8,6 +8,13 @@
 <string name="unacknowledged_alerts">Unacknowledged alerts: %1$d</string><string name="acknowledge_alert">Acknowledge Alert</string>
 <string name="prototype_testing">Prototype Testing</string><string name="simulate_drowsiness">Simulate Drowsiness Event</string>
 <string name="event_history">Event History</string><string name="clear_history">Clear History</string><string name="no_events_recorded">No events recorded.</string>
+<string name="session_monitoring">Session Monitoring</string>
+<string name="session_monitoring_hint">Sessions begin when the dashboard opens and end when the app leaves the foreground.</string>
+<string name="session_started_at">Session Started at %1$s</string>
+<string name="session_ended_at">Session Ended at %1$s</string>
+<string name="session_in_progress">Session is currently active.</string>
+<string name="session_end_estimated_note">End time estimated after an unexpected app closure.</string>
+<string name="no_sessions_recorded">No sessions recorded yet.</string>
 <string name="alert_preferences">Alert Preferences</string><string name="vibration_enabled">Enable vibration alert (phone and glasses)</string><string name="buzzer_enabled">Enable audible alert (phone and glasses)</string>
 <string name="vibration_strength">Vibration strength: %1$d%%</string><string name="apply_vibration_strength">Apply Vibration Strength</string>
 <string name="emergency_threshold">Prepare SMS after %1$d unacknowledged alert(s)</string><string name="auto_sms_progress">Unacknowledged alerts: %1$d / %2$d</string><string name="emergency">Emergency</string><string name="emergency_contact_hint">Emergency contact number</string>
@@ -63,7 +70,7 @@
 <string name="auth_error_confirm">The passwords do not match.</string>
 <string name="auth_error_exists">That username is already registered on this device.</string>
 <string name="auth_error_invalid">Username or password is incorrect.</string>
-<string name="auth_local_account_note">Accounts are stored on this device only. They do not sync to other phones, and this prototype login is not a cloud account.</string>
+<string name="auth_local_account_note">Accounts, settings, history, and sessions are stored separately on this device. Cross-device syncing requires cloud account setup.</string>
 <string name="log_out">Log out</string>
 
 </resources>

@@ -61,10 +61,14 @@ class MainActivity : AppCompatActivity() {
     private var activeAlertTone: ToneGenerator? = null
     private var toneReleaseRunnable: Runnable? = null
     private var smsPreparedForCurrentAlertCycle = false
+    private var activeSessionStartMillis: Long? = null
 
     companion object {
         private const val DROWSINESS_CHANNEL_ID = "visionex_drowsiness_alerts"
         private const val DROWSINESS_NOTIFICATION_ID = 6201
+        private const val SESSION_HISTORY_KEY = "sessions"
+        private const val ACTIVE_SESSION_START_KEY = "active_session_start"
+        private const val MAX_STORED_SESSIONS = 100
     }
 
     private val launcher = registerForActivityResult(
@@ -446,6 +450,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        startMonitoringSession()
+    }
+
+    override fun onStop() {
+        finishMonitoringSession()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         stopLocalAlerts()
         if (::cameraManager.isInitialized) {
@@ -767,6 +781,102 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.sms_opened, Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
             Toast.makeText(this, getString(R.string.sms_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun startMonitoringSession() {
+        if (activeSessionStartMillis != null) return
+
+        val now = System.currentTimeMillis()
+        val unfinishedStart = prefs.getLong(ACTIVE_SESSION_START_KEY, 0L)
+        if (unfinishedStart > 0L) {
+            // If Android killed the process unexpectedly, preserve the unfinished
+            // record and mark the end as estimated at the next launch.
+            storeCompletedSession(unfinishedStart, maxOf(unfinishedStart, now), recovered = true)
+        }
+
+        activeSessionStartMillis = now
+        prefs.edit { putLong(ACTIVE_SESSION_START_KEY, now) }
+        renderSessions()
+    }
+
+    private fun finishMonitoringSession() {
+        val startedAt = activeSessionStartMillis ?: prefs.getLong(ACTIVE_SESSION_START_KEY, 0L)
+        if (startedAt <= 0L) return
+
+        val endedAt = maxOf(startedAt, System.currentTimeMillis())
+        storeCompletedSession(startedAt, endedAt, recovered = false)
+        activeSessionStartMillis = null
+        prefs.edit { remove(ACTIVE_SESSION_START_KEY) }
+        renderSessions()
+    }
+
+    private fun storeCompletedSession(startedAt: Long, endedAt: Long, recovered: Boolean) {
+        val previous = getSessions()
+        val updated = JSONArray()
+        val firstToKeep = (previous.length() - MAX_STORED_SESSIONS + 1).coerceAtLeast(0)
+        for (i in firstToKeep until previous.length()) {
+            val session = previous.optJSONObject(i) ?: continue
+            updated.put(session)
+        }
+        updated.put(
+            JSONObject()
+                .put("startedAt", startedAt)
+                .put("endedAt", endedAt)
+                .put("recovered", recovered)
+        )
+        prefs.edit { putString(SESSION_HISTORY_KEY, updated.toString()) }
+    }
+
+    private fun getSessions(): JSONArray {
+        val saved = prefs.getString(SESSION_HISTORY_KEY, null)
+        return try {
+            if (saved.isNullOrBlank()) JSONArray() else JSONArray(saved)
+        } catch (_: Exception) {
+            JSONArray()
+        }
+    }
+
+    private fun formatSessionTimestamp(timestamp: Long): String =
+        SimpleDateFormat("MMMM d, yyyy h:mm a", Locale.getDefault()).format(Date(timestamp))
+
+    private fun renderSessions() {
+        if (!::binding.isInitialized) return
+
+        val rows = mutableListOf<String>()
+        activeSessionStartMillis?.let { startedAt ->
+            rows += getString(R.string.session_started_at, formatSessionTimestamp(startedAt)) +
+                "\n" + getString(R.string.session_in_progress)
+        }
+
+        val sessions = getSessions()
+        for (i in sessions.length() - 1 downTo 0) {
+            val session = sessions.optJSONObject(i) ?: continue
+            val startedAt = session.optLong("startedAt", 0L)
+            val endedAt = session.optLong("endedAt", 0L)
+            if (startedAt <= 0L) continue
+
+            val startedLine = getString(
+                R.string.session_started_at,
+                formatSessionTimestamp(startedAt)
+            )
+            val endedLine = if (endedAt > 0L) {
+                getString(R.string.session_ended_at, formatSessionTimestamp(endedAt))
+            } else {
+                getString(R.string.session_in_progress)
+            }
+            val recoveryNote = if (session.optBoolean("recovered", false)) {
+                "\n" + getString(R.string.session_end_estimated_note)
+            } else {
+                ""
+            }
+            rows += "$startedLine\n$endedLine$recoveryNote"
+        }
+
+        binding.sessionHistoryText.text = if (rows.isEmpty()) {
+            getString(R.string.no_sessions_recorded)
+        } else {
+            rows.joinToString("\n\n")
         }
     }
 
