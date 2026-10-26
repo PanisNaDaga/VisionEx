@@ -47,7 +47,7 @@ val prepareVisionExEyeModel by tasks.registering {
             connection.connectTimeout = 20000
             connection.readTimeout = 90000
             connection.instanceFollowRedirects = true
-            connection.setRequestProperty("User-Agent", "VisionEx-Android/0.0.4")
+            connection.setRequestProperty("User-Agent", "VisionEx-Android/0.0.5")
             val status = connection.responseCode
             if (status !in 200..299) {
                 throw GradleException("Could not download the VisionEx eye model (HTTP $status). Check your internet connection.")
@@ -81,8 +81,8 @@ android {
         applicationId = "com.visionex.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.0.4"
+        versionCode = 5
+        versionName = "0.0.5"
     }
 
     buildFeatures { viewBinding = true }
