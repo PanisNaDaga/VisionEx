@@ -636,11 +636,6 @@ class MainActivity : AppCompatActivity() {
 
         startLocalAlerts()
         showDrowsinessNotification()
-        val hardwareAlertEnabled =
-            prefs.getBoolean("vibration_enabled", true) ||
-            prefs.getBoolean("buzzer_enabled", true)
-        ble.sendCommand(if (hardwareAlertEnabled) "ALERT:1" else "ALERT:0")
-
         binding.drowsinessText.text = getString(R.string.drowsiness_detected)
         binding.drowsinessText.setTextColor(ContextCompat.getColor(this, R.color.visionex_warning))
         binding.drowsinessText.setBackgroundResource(R.drawable.status_pill_warning)
