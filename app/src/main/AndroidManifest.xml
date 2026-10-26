@@ -5,7 +5,8 @@
  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
- <uses-permission android:name="android.permission.SEND_SMS" />
+ <uses-permission android:name="android.permission.VIBRATE" />
+ <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
  <uses-permission android:name="android.permission.CAMERA" />
  <uses-permission android:name="android.permission.INTERNET" />
  <uses-feature android:name="android.hardware.camera.any" android:required="false" />
@@ -13,7 +14,8 @@
  <application android:allowBackup="true" android:label="VisionEx" android:supportsRtl="true"
      android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
      android:theme="@style/Theme.VisionEx">
-  <activity android:name=".MainActivity" android:exported="true">
+  <activity android:name=".MainActivity" android:exported="false" />
+  <activity android:name=".AuthActivity" android:exported="true">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
   </activity>
  </application>
