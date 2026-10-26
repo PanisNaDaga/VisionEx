@@ -3,10 +3,10 @@ name: Android Build Check
 on:
   push:
     branches:
-      - version-0.0.4
+      - version-0.0.5
   pull_request:
     branches:
-      - version-0.0.4
+      - version-0.0.5
   workflow_dispatch:
 
 permissions:
@@ -43,7 +43,7 @@ jobs:
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: VisionEx-v0.0.4-debug
+          name: VisionEx-v0.0.5-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
