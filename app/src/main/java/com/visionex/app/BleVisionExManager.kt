@@ -167,75 +167,78 @@ class BleVisionExManager(
         }
 
         @SuppressLint("MissingPermission")
-        @Synchronized
         override fun onServicesDiscovered(currentGatt: BluetoothGatt, status: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                onStatus("Bluetooth service discovery failed ($status).")
-                return
-            }
-            val service = currentGatt.getService(SERVICE_UUID)
-            if (service == null) {
-                onStatus("Connected, but VisionEx BLE service was not found.")
-                return
-            }
+            synchronized(this@BleVisionExManager) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    onStatus("Bluetooth service discovery failed ($status).")
+                    return
+                }
+                val service = currentGatt.getService(SERVICE_UUID)
+                if (service == null) {
+                    onStatus("Connected, but VisionEx BLE service was not found.")
+                    return
+                }
 
-            val notifyCharacteristic = service.getCharacteristic(TX_NOTIFY_UUID)
-            writeCharacteristic = service.getCharacteristic(RX_WRITE_UUID)
+                val notifyCharacteristic = service.getCharacteristic(TX_NOTIFY_UUID)
+                writeCharacteristic = service.getCharacteristic(RX_WRITE_UUID)
 
-            if (notifyCharacteristic != null) {
-                currentGatt.setCharacteristicNotification(notifyCharacteristic, true)
-                val descriptor = notifyCharacteristic.getDescriptor(CCCD_UUID)
-                if (descriptor != null) {
-                    writeInProgress = true
-                    val accepted = if (Build.VERSION.SDK_INT >= 33) {
-                        currentGatt.writeDescriptor(
-                            descriptor,
-                            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                        ) == BluetoothStatusCodes.SUCCESS
+                if (notifyCharacteristic != null) {
+                    currentGatt.setCharacteristicNotification(notifyCharacteristic, true)
+                    val descriptor = notifyCharacteristic.getDescriptor(CCCD_UUID)
+                    if (descriptor != null) {
+                        writeInProgress = true
+                        val accepted = if (Build.VERSION.SDK_INT >= 33) {
+                            currentGatt.writeDescriptor(
+                                descriptor,
+                                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            ) == BluetoothStatusCodes.SUCCESS
+                        } else {
+                            @Suppress("DEPRECATION")
+                            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            @Suppress("DEPRECATION")
+                            currentGatt.writeDescriptor(descriptor)
+                        }
+                        if (!accepted) {
+                            writeInProgress = false
+                            onStatus("Could not enable VisionEx notifications.")
+                            writeNextCommand()
+                        }
                     } else {
-                        @Suppress("DEPRECATION")
-                        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                        @Suppress("DEPRECATION")
-                        currentGatt.writeDescriptor(descriptor)
-                    }
-                    if (!accepted) {
-                        writeInProgress = false
-                        onStatus("Could not enable VisionEx notifications.")
                         writeNextCommand()
                     }
                 } else {
                     writeNextCommand()
                 }
-            } else {
-                writeNextCommand()
+                onStatus("VISIONEX connected")
             }
-            onStatus("VISIONEX connected")
         }
 
-        @Synchronized
         override fun onDescriptorWrite(
             currentGatt: BluetoothGatt,
             descriptor: BluetoothGattDescriptor,
             status: Int
         ) {
-            writeInProgress = false
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                onStatus("Could not enable VisionEx notifications ($status).")
+            synchronized(this@BleVisionExManager) {
+                writeInProgress = false
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    onStatus("Could not enable VisionEx notifications ($status).")
+                }
+                writeNextCommand()
             }
-            writeNextCommand()
         }
 
-        @Synchronized
         override fun onCharacteristicWrite(
             currentGatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
             status: Int
         ) {
-            writeInProgress = false
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                onStatus("Bluetooth command write failed ($status).")
+            synchronized(this@BleVisionExManager) {
+                writeInProgress = false
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    onStatus("Bluetooth command write failed ($status).")
+                }
+                writeNextCommand()
             }
-            writeNextCommand()
         }
 
         @Deprecated("Deprecated in API 33")
