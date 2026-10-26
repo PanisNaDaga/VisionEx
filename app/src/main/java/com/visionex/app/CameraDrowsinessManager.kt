@@ -213,7 +213,7 @@ class CameraDrowsinessManager(
             readTimeout = 60000
             instanceFollowRedirects = true
             requestMethod = "GET"
-            setRequestProperty("User-Agent", "VisionEx-Android/0.0.3")
+            setRequestProperty("User-Agent", "VisionEx-Android/0.0.5")
         }
         try {
             connection.connect()
