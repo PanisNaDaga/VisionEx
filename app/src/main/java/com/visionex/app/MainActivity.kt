@@ -448,8 +448,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopLocalAlerts()
-        try { cameraManager.close() } catch (_: Exception) {}
-        ble.disconnect()
+        if (::cameraManager.isInitialized) {
+            try { cameraManager.close() } catch (_: Exception) {}
+        }
+        if (::ble.isInitialized) {
+            try { ble.disconnect() } catch (_: Exception) {}
+        }
         super.onDestroy()
     }
 
