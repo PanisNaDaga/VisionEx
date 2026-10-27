@@ -211,6 +211,10 @@ class MainActivity : AppCompatActivity() {
         binding.logoutButton.isEnabled = false
         binding.clearHistoryButton.isEnabled = false
         binding.clearSessionsButton.isEnabled = false
+        binding.connectButton.isEnabled = false
+        binding.ackButton.isEnabled = false
+        binding.simulateButton.isEnabled = false
+        binding.testSmsButton.isEnabled = false
         createDrowsinessNotificationChannel()
 
         ble = BleVisionExManager(
@@ -406,6 +410,10 @@ class MainActivity : AppCompatActivity() {
         binding.logoutButton.isEnabled = true
         binding.clearHistoryButton.isEnabled = true
         binding.clearSessionsButton.isEnabled = true
+        binding.connectButton.isEnabled = true
+        binding.ackButton.isEnabled = true
+        binding.simulateButton.isEnabled = true
+        binding.testSmsButton.isEnabled = true
         if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
             startMonitoringSession()
         }
@@ -511,6 +519,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveCloudHistoryEvent(time: String, description: String, timestampMillis: Long) {
+        if (!accountDataReady) return
         historyCollection()?.document()?.set(
             mapOf(
                 "time" to time,
