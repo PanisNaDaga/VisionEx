@@ -649,10 +649,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun uploadCustomAlertAudio(uri: Uri) {
         val user = FirebaseAuth.getInstance().currentUser ?: return
-        if (BuildConfig.FIREBASE_STORAGE_BUCKET.isBlank()) {
-            Snackbar.make(binding.root, R.string.alert_audio_storage_missing, Snackbar.LENGTH_LONG).show()
-            return
-        }
         val reference = try {
             FirebaseStorage.getInstance().reference
                 .child("users/${user.uid}/alert_audio/custom_alert")
