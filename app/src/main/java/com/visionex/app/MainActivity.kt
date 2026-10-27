@@ -662,11 +662,13 @@ class MainActivity : AppCompatActivity() {
         updateAlerts()
         updateAutoSmsProgress()
 
-        when (prefs.getString("theme", "system")) {
+        val savedTheme = prefs.getString("theme", "system") ?: "system"
+        when (savedTheme) {
             "light" -> binding.themeLight.isChecked = true
             "dark" -> binding.themeDark.isChecked = true
             else -> binding.themeSystem.isChecked = true
         }
+        applyTheme(savedTheme)
     }
 
     private fun setupSettingsControls() {
@@ -892,6 +894,8 @@ class MainActivity : AppCompatActivity() {
             addEvent("Alert acknowledged")
         }
         binding.logoutButton.setOnClickListener {
+            cloudSettingsSyncRunnable?.let { cloudSyncHandler.removeCallbacks(it) }
+            saveSettingsToCloud()
             finishMonitoringSession()
             stopLocalAlerts()
             cameraManager.stopCamera()
