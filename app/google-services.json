@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "804978740193",
+    "project_id": "visionex-c6d5a",
+    "storage_bucket": "visionex-c6d5a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:804978740193:android:400559b7189588ef3ca0a0",
+        "android_client_info": {
+          "package_name": "com.visionex.app"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "AIzaSyCrXY0PdHfUpCtiHPngrdELIkr78Ckjt_s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
