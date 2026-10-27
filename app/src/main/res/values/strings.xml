@@ -17,12 +17,12 @@
 <string name="no_sessions_recorded">No sessions recorded yet.</string>
 <string name="alert_preferences">Alert Preferences</string><string name="vibration_enabled">Enable vibration alert (phone and glasses)</string><string name="buzzer_enabled">Enable audible alert (phone and glasses)</string>
 <string name="vibration_strength">Vibration strength: %1$d%%</string><string name="apply_vibration_strength">Apply Vibration Strength</string>
-<string name="emergency_threshold">Prepare SMS after %1$d unacknowledged alert(s)</string><string name="auto_sms_progress">Unacknowledged alerts: %1$d / %2$d</string><string name="emergency">Emergency</string><string name="emergency_contact_hint">Emergency contact number</string>
-<string name="automatic_sms">Open a prepared SMS after the selected alert threshold. You must review the message and tap Send in your messaging app.</string><string name="send_test_emergency_sms">Prepare Test Emergency SMS</string>
+<string name="emergency_threshold">Automatically send SMS after %1$d unacknowledged alert(s)</string><string name="auto_sms_progress">Unacknowledged alerts: %1$d / %2$d</string><string name="emergency">Emergency</string><string name="emergency_contact_hint">Emergency contact number</string>
+<string name="automatic_sms">Send an SMS directly after the selected alert threshold. Requires SMS permission, an active SIM, and cellular service.</string><string name="send_test_emergency_sms">Send Test Emergency SMS</string>
 <string name="appearance">Appearance</string><string name="theme_system">System</string><string name="theme_light">Light</string><string name="theme_dark">Dark</string>
 <string name="nearby_permission_needed">Nearby-device permission is needed to connect to VisionEx.</string><string name="drowsiness_detected">DROWSINESS DETECTED</string><string name="normal">NORMAL</string>
-<string name="enter_emergency_contact">Enter an emergency contact first.</string><string name="sms_sent">SMS sent.</string><string name="sms_failed">SMS failed: %1$s</string>
-<string name="location_permission_required">Location permission is required for the emergency message.</string><string name="sms_opened">Emergency message prepared. Review it and tap Send in your messaging app.</string>
+<string name="enter_emergency_contact">Enter an emergency contact first.</string><string name="sms_sent">SMS accepted for sending. Carrier delivery is not guaranteed.</string><string name="sms_failed">SMS failed: %1$s</string><string name="sms_permission_needed">Allow SMS permission so VisionEx can send emergency texts directly.</string><string name="sms_permission_denied">SMS permission was denied. Direct SMS sending is disabled.</string><string name="sms_submitting">Sending SMS directly...</string>
+<string name="location_permission_required">Location permission is required for the emergency message.</string><string name="sms_opened">Emergency SMS was submitted for direct sending.</string>
 <string name="settings_sent">Settings sent to VisionEx.</string>
 <string name="camera_title">Camera Integration Test</string>
 <string name="camera_hint">Use this screen to test the phone camera and eye-state analysis while parked. Camera analysis is experimental and is not a replacement for the smart-glasses firmware.</string>
