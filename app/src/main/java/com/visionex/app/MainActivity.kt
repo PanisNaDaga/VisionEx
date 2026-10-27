@@ -3,13 +3,15 @@ package com.visionex.app
 import android.Manifest
 import android.content.Intent
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.app.Activity
 import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.ToneGenerator
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
@@ -17,6 +19,8 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.Build
 import android.os.Bundle
+import android.telephony.SmsManager
+import android.telephony.SubscriptionManager
 import android.view.View
 import android.widget.SeekBar
 import android.widget.Toast
@@ -63,9 +67,21 @@ class MainActivity : AppCompatActivity() {
     private var smsPreparedForCurrentAlertCycle = false
     private var activeSessionStartMillis: Long? = null
 
+    private var pendingSmsPayload: Pair<String, String>? = null
+    private var activeSmsBatchId = 0L
+    private var smsBatchInProgress = false
+    private var smsPartsExpected = 0
+    private var smsPartsCompleted = 0
+    private var smsBatchFailed = false
+    private var smsBatchFailureReason: String? = null
+
     companion object {
         private const val DROWSINESS_CHANNEL_ID = "visionex_drowsiness_alerts"
         private const val DROWSINESS_NOTIFICATION_ID = 6201
+        private const val SMS_SENT_ACTION = "com.visionex.app.SMS_SENT"
+        private const val EXTRA_SMS_BATCH_ID = "sms_batch_id"
+        private const val EXTRA_SMS_PART_INDEX = "sms_part_index"
+        private const val EXTRA_SMS_PART_COUNT = "sms_part_count"
         private const val SESSION_HISTORY_KEY = "sessions"
         private const val ACTIVE_SESSION_START_KEY = "active_session_start"
         private const val MAX_STORED_SESSIONS = 100
@@ -84,6 +100,62 @@ class MainActivity : AppCompatActivity() {
     ) { granted ->
         if (granted) startSelectedCamera()
         else Snackbar.make(binding.root, R.string.camera_status_permission, Snackbar.LENGTH_LONG).show()
+    }
+
+    private val smsPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pending = pendingSmsPayload
+        pendingSmsPayload = null
+        if (granted) {
+            if (pending != null) sendSmsDirect(pending.first, pending.second)
+        } else {
+            addEvent("SMS not sent: SEND_SMS permission denied")
+            binding.autoSmsSwitch.isChecked = false
+            prefs.edit { putBoolean("auto_sms", false) }
+            Toast.makeText(this, R.string.sms_permission_denied, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private val smsSentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val receivedIntent = intent ?: return
+            if (receivedIntent.action != SMS_SENT_ACTION) return
+            val batchId = receivedIntent.getLongExtra(EXTRA_SMS_BATCH_ID, -1L)
+            if (!smsBatchInProgress || batchId != activeSmsBatchId) return
+
+            if (resultCode != Activity.RESULT_OK) {
+                smsBatchFailed = true
+                if (smsBatchFailureReason == null) {
+                    smsBatchFailureReason = when (resultCode) {
+                        SmsManager.RESULT_ERROR_NO_SERVICE -> "No cellular service"
+                        SmsManager.RESULT_ERROR_RADIO_OFF -> "Cellular radio is off"
+                        SmsManager.RESULT_ERROR_NULL_PDU -> "Invalid SMS data"
+                        SmsManager.RESULT_ERROR_GENERIC_FAILURE -> "Carrier or SMS service rejected the message"
+                        else -> "Android SMS service returned error code ${resultCode}"
+                    }
+                }
+            }
+
+            smsPartsCompleted++
+            if (smsPartsCompleted >= smsPartsExpected) {
+                smsBatchInProgress = false
+                val failure = smsBatchFailureReason
+                activeSmsBatchId = 0L
+                if (smsBatchFailed) {
+                    val reason = failure ?: "SMS transmission failed"
+                    addEvent("SMS transmission failed: " + reason)
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.sms_failed, reason),
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    addEvent("All SMS parts accepted by Android/carrier; delivery confirmation is unavailable")
+                    Toast.makeText(this@MainActivity, R.string.sms_sent, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,6 +232,12 @@ class MainActivity : AppCompatActivity() {
         setupCameraControls()
         updateAlerts()
         renderHistory()
+        ContextCompat.registerReceiver(
+            this,
+            smsSentReceiver,
+            IntentFilter(SMS_SENT_ACTION),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         requestPermissionsNow()
     }
 
@@ -266,6 +344,12 @@ class MainActivity : AppCompatActivity() {
         binding.autoSmsSwitch.setOnCheckedChangeListener { _, enabled ->
             prefs.edit { putBoolean("auto_sms", enabled) }
             updateAutoSmsProgress()
+            if (enabled &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                smsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
+            }
         }
 
         binding.themeGroup.setOnCheckedChangeListener { _, checkedId ->
@@ -462,6 +546,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         stopLocalAlerts()
+        try { unregisterReceiver(smsSentReceiver) } catch (_: Exception) {}
         if (::cameraManager.isInitialized) {
             try { cameraManager.close() } catch (_: Exception) {}
         }
@@ -741,10 +826,10 @@ class MainActivity : AppCompatActivity() {
             } else {
                 " Driver location is unavailable."
             }
-            openSmsApp(number, messageStart + locationText)
+            sendSmsDirect(number, messageStart + locationText)
             addEvent(
-                if (test) "Test emergency SMS composer opened for manual sending"
-                else "Emergency SMS composer opened after $triggeredAtCount unacknowledged alert(s)"
+                if (test) "Test emergency SMS direct-send requested"
+                else "Emergency SMS direct-send requested after " + triggeredAtCount + " unacknowledged alert(s)"
             )
         }
 
@@ -772,15 +857,85 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun openSmsApp(number: String, message: String) {
+    @Suppress("DEPRECATION")
+    private fun sendSmsDirect(number: String, message: String) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingSmsPayload = number to message
+            smsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
+            return
+        }
+
+        if (smsBatchInProgress) {
+            addEvent("SMS not sent: another SMS submission is still in progress")
+            Toast.makeText(this, "An SMS is already being submitted. Try again shortly.", Toast.LENGTH_LONG).show()
+            return
+        }
+
         try {
-            startActivity(Intent(Intent.ACTION_SENDTO).apply {
-                data = Uri.parse("smsto:" + Uri.encode(number))
-                putExtra("sms_body", message)
-            })
-            Toast.makeText(this, R.string.sms_opened, Toast.LENGTH_LONG).show()
+            val smsManager: SmsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val subscriptionId = SubscriptionManager.getDefaultSmsSubscriptionId()
+                if (subscriptionId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                    val reason = "No default SMS SIM is selected"
+                    addEvent("SMS submission failed: " + reason)
+                    Toast.makeText(this, getString(R.string.sms_failed, reason), Toast.LENGTH_LONG).show()
+                    return
+                }
+                val systemSmsManager = getSystemService(SmsManager::class.java)
+                if (systemSmsManager == null) {
+                    val reason = "SMS service is unavailable"
+                    addEvent("SMS submission failed: " + reason)
+                    Toast.makeText(this, getString(R.string.sms_failed, reason), Toast.LENGTH_LONG).show()
+                    return
+                }
+                systemSmsManager.createForSubscriptionId(subscriptionId)
+            } else {
+                SmsManager.getDefault()
+            }
+
+            val parts = smsManager.divideMessage(message)
+            if (parts.isNullOrEmpty()) {
+                val reason = "SMS message is empty"
+                addEvent("SMS submission failed: " + reason)
+                Toast.makeText(this, getString(R.string.sms_failed, reason), Toast.LENGTH_LONG).show()
+                return
+            }
+
+            activeSmsBatchId = System.currentTimeMillis()
+            smsPartsExpected = parts.size
+            smsPartsCompleted = 0
+            smsBatchFailed = false
+            smsBatchFailureReason = null
+            smsBatchInProgress = true
+
+            val sentIntents = ArrayList<PendingIntent>(parts.size)
+            parts.forEachIndexed { index, _ ->
+                val sentIntent = Intent(SMS_SENT_ACTION)
+                    .setPackage(packageName)
+                    .putExtra(EXTRA_SMS_BATCH_ID, activeSmsBatchId)
+                    .putExtra(EXTRA_SMS_PART_INDEX, index)
+                    .putExtra(EXTRA_SMS_PART_COUNT, parts.size)
+                val requestCode = (activeSmsBatchId % 1_000_000L).toInt() * 100 + index
+                sentIntents.add(
+                    PendingIntent.getBroadcast(
+                        this,
+                        requestCode,
+                        sentIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
+            }
+
+            smsManager.sendMultipartTextMessage(number, null, parts, sentIntents, null)
+            addEvent("Direct SMS submitted to Android SMS service (" + parts.size + " part(s)); awaiting send result")
+            Toast.makeText(this, R.string.sms_submitting, Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(this, getString(R.string.sms_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
+            smsBatchInProgress = false
+            activeSmsBatchId = 0L
+            val reason = e.message ?: "Unknown SMS error"
+            addEvent("SMS submission failed: " + reason)
+            Toast.makeText(this, getString(R.string.sms_failed, reason), Toast.LENGTH_LONG).show()
         }
     }
 
