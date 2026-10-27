@@ -8,6 +8,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val firebaseApiKey = (findProperty("visionexFirebaseApiKey") as String?)
+    ?: System.getenv("VISIONEX_FIREBASE_API_KEY").orEmpty()
+val firebaseAppId = (findProperty("visionexFirebaseAppId") as String?)
+    ?: System.getenv("VISIONEX_FIREBASE_APP_ID").orEmpty()
+val firebaseProjectId = (findProperty("visionexFirebaseProjectId") as String?)
+    ?: System.getenv("VISIONEX_FIREBASE_PROJECT_ID").orEmpty()
+val firebaseStorageBucket = (findProperty("visionexFirebaseStorageBucket") as String?)
+    ?: System.getenv("VISIONEX_FIREBASE_STORAGE_BUCKET").orEmpty()
+
 val visionExEyeModelUrl =
     "https://huggingface.co/MichalMlodawski/open-closed-eye-detection/resolve/main/model.onnx"
 val visionExEyeModelSha256 =
@@ -81,11 +90,18 @@ android {
         applicationId = "com.visionex.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.0.5"
+        versionCode = 6
+        versionName = "0.0.6"
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"${firebaseAppId.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${firebaseProjectId.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${firebaseStorageBucket.replace("\"", "\\\"")}\"")
     }
 
-    buildFeatures { viewBinding = true }
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -98,6 +114,10 @@ tasks.named("preBuild").configure {
 }
 
 dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-storage")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
