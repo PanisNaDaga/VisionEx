@@ -1,0 +1,6 @@
+# Copy these properties to your user-level ~/.gradle/gradle.properties file.
+# Do not put actual project values or secrets in this example file.
+visionexFirebaseApiKey=YOUR_FIREBASE_WEB_API_KEY
+visionexFirebaseAppId=YOUR_ANDROID_APP_ID
+visionexFirebaseProjectId=YOUR_FIREBASE_PROJECT_ID
+visionexFirebaseStorageBucket=YOUR_FIREBASE_STORAGE_BUCKET
