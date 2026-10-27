@@ -303,9 +303,27 @@ class MainActivity : AppCompatActivity() {
             .addOnSuccessListener {
                 val loaded = settingsTask.isSuccessful && historyTask.isSuccessful && sessionsTask.isSuccessful
                 if (loaded) {
-                    applyCloudSettings(settingsTask.result)
-                    replaceLocalHistoryFromCloud(historyTask.result)
-                    replaceLocalSessionsFromCloud(sessionsTask.result)
+                    val settingsSnapshot = settingsTask.result
+                    val historySnapshot = historyTask.result
+                    val sessionsSnapshot = sessionsTask.result
+                    val migrationNotDone = !prefs.getBoolean("cloud_migration_completed", false)
+                    val shouldMigrateLocalData = migrationNotDone &&
+                        !settingsSnapshot.exists() &&
+                        historySnapshot.isEmpty &&
+                        sessionsSnapshot.isEmpty
+
+                    if (shouldMigrateLocalData) {
+                        // Preserve this username's existing v0.0.5 local data on its first cloud login.
+                        saveSettingsToCloud()
+                        migrateLocalHistoryToCloud()
+                        migrateLocalSessionsToCloud()
+                        prefs.edit { putBoolean("cloud_migration_completed", true) }
+                    } else {
+                        applyCloudSettings(settingsSnapshot)
+                        replaceLocalHistoryFromCloud(historySnapshot)
+                        replaceLocalSessionsFromCloud(sessionsSnapshot)
+                        prefs.edit { putBoolean("cloud_migration_completed", true) }
+                    }
                 } else {
                     Snackbar.make(binding.root, R.string.cloud_sync_failed, Snackbar.LENGTH_LONG).show()
                 }
@@ -315,6 +333,57 @@ class MainActivity : AppCompatActivity() {
                 Snackbar.make(binding.root, R.string.cloud_sync_failed, Snackbar.LENGTH_LONG).show()
                 initializeAccountUi(syncInitialSettings = false)
             }
+    }
+
+    private fun migrateLocalHistoryToCloud() {
+        val collection = historyCollection() ?: return
+        val localHistory = getHistory()
+        for (i in 0 until localHistory.length()) {
+            val event = localHistory.optJSONObject(i) ?: continue
+            val textTime = event.optString("time", "")
+            val description = event.optString("description", "")
+            val storedTimestamp = event.optLong("timestampMillis", 0L)
+            val timestamp = if (storedTimestamp > 0L) storedTimestamp else parseHistoryTimestamp(textTime)
+            collection.document().set(
+                mapOf(
+                    "time" to if (textTime.isBlank()) formatHistoryTimestamp(timestamp) else textTime,
+                    "description" to description,
+                    "timestampMillis" to timestamp
+                )
+            ).addOnFailureListener {
+                android.util.Log.w("VisionEx", "Local history migration failed", it)
+            }
+        }
+    }
+
+    private fun parseHistoryTimestamp(value: String): Long {
+        if (value.isBlank()) return System.currentTimeMillis()
+        return try {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(value)?.time
+                ?: System.currentTimeMillis()
+        } catch (_: Exception) {
+            System.currentTimeMillis()
+        }
+    }
+
+    private fun formatHistoryTimestamp(timestamp: Long): String =
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+
+    private fun migrateLocalSessionsToCloud() {
+        val sessions = getSessions()
+        for (i in 0 until sessions.length()) {
+            val session = sessions.optJSONObject(i) ?: continue
+            val startedAt = session.optLong("startedAt", 0L)
+            if (startedAt <= 0L) continue
+            val id = session.optString("sessionId").takeIf { it.isNotBlank() }
+                ?: UUID.randomUUID().toString()
+            saveCloudSession(
+                id,
+                startedAt,
+                session.optLong("endedAt", 0L),
+                session.optBoolean("recovered", false)
+            )
+        }
     }
 
     private fun initializeAccountUi(syncInitialSettings: Boolean) {
@@ -414,7 +483,7 @@ class MainActivity : AppCompatActivity() {
         val document = settingsDocument() ?: return
         val excludedKeys = setOf(
             "history", SESSION_HISTORY_KEY, ACTIVE_SESSION_START_KEY,
-            ACTIVE_SESSION_ID_KEY, "custom_audio_uri"
+            ACTIVE_SESSION_ID_KEY, "custom_audio_uri", "cloud_migration_completed"
         )
         val settings = hashMapOf<String, Any>()
         prefs.all.forEach { (key, value) ->
