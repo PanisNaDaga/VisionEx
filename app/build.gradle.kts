@@ -6,16 +6,8 @@ import java.security.MessageDigest
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
-
-val firebaseApiKey = (findProperty("visionexFirebaseApiKey") as String?)
-    ?: System.getenv("VISIONEX_FIREBASE_API_KEY").orEmpty()
-val firebaseAppId = (findProperty("visionexFirebaseAppId") as String?)
-    ?: System.getenv("VISIONEX_FIREBASE_APP_ID").orEmpty()
-val firebaseProjectId = (findProperty("visionexFirebaseProjectId") as String?)
-    ?: System.getenv("VISIONEX_FIREBASE_PROJECT_ID").orEmpty()
-val firebaseStorageBucket = (findProperty("visionexFirebaseStorageBucket") as String?)
-    ?: System.getenv("VISIONEX_FIREBASE_STORAGE_BUCKET").orEmpty()
 
 val visionExEyeModelUrl =
     "https://huggingface.co/MichalMlodawski/open-closed-eye-detection/resolve/main/model.onnx"
@@ -92,10 +84,6 @@ android {
         targetSdk = 35
         versionCode = 6
         versionName = "0.0.6"
-        buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseApiKey.replace("\"", "\\\"")}\"")
-        buildConfigField("String", "FIREBASE_APP_ID", "\"${firebaseAppId.replace("\"", "\\\"")}\"")
-        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${firebaseProjectId.replace("\"", "\\\"")}\"")
-        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"${firebaseStorageBucket.replace("\"", "\\\"")}\"")
     }
 
     buildFeatures {
