@@ -9,13 +9,13 @@
 <string name="prototype_testing">Prototype Testing</string><string name="simulate_drowsiness">Simulate Drowsiness Event</string>
 <string name="event_history">Event History</string><string name="clear_history">Clear History</string><string name="no_events_recorded">No events recorded.</string>
 <string name="session_monitoring">Session Monitoring</string>
-<string name="session_monitoring_hint">Sessions begin when the dashboard opens and end when the app leaves the foreground.</string>
+<string name="session_monitoring_hint">Each monitoring period is grouped as a numbered session and saved to your cloud account.</string>
 <string name="session_started_at">Session Started at %1$s</string>
 <string name="session_ended_at">Session Ended at %1$s</string>
 <string name="session_in_progress">Session is currently active.</string>
 <string name="session_end_estimated_note">End time estimated after an unexpected app closure.</string>
-<string name="no_sessions_recorded">No sessions recorded yet.</string>
-<string name="alert_preferences">Alert Preferences</string><string name="vibration_enabled">Enable vibration alert (phone and glasses)</string><string name="buzzer_enabled">Enable audible alert (phone and glasses)</string>
+<string name="no_sessions_recorded">No sessions recorded yet.</string><string name="clear_session_history">Clear Session History</string><string name="confirm_clear_sessions_title">Clear session history?</string><string name="confirm_clear_sessions_message">Completed sessions will be permanently deleted from this account. The current session will remain active.</string><string name="confirm_clear_history_title">Clear event history?</string><string name="confirm_clear_history_message">Event history will be permanently deleted from this account.</string><string name="cancel">Cancel</string><string name="clear">Clear</string>
+<string name="alert_preferences">Alert Preferences</string><string name="vibration_enabled">Enable vibration alert (phone and glasses)</string><string name="buzzer_enabled">Enable repeating audio alert (phone and glasses)</string><string name="alert_audio_title">Driver alert sound</string><string name="alert_audio_hint">Choose a sound file for the phone alert. It will repeat while drowsiness is detected, then stop when the driver returns to a normal state.</string><string name="choose_alert_audio">Choose custom audio</string><string name="use_default_alert_audio">Use default alarm sound</string><string name="alert_audio_default">Default alarm sound</string><string name="alert_audio_custom">Custom audio: %1$s</string><string name="alert_audio_uploading">Uploading custom audio to your account…</string><string name="alert_audio_uploaded">Custom sound saved to your cloud account.</string><string name="alert_audio_upload_failed">Custom sound is saved on this device, but cloud upload failed: %1$s</string><string name="alert_audio_storage_missing">Firebase Storage is not configured. The custom sound will only work on this device.</string><string name="alert_audio_playback_failed">Could not play the selected sound. The app will try another sound.</string>
 <string name="vibration_strength">Vibration strength: %1$d%%</string><string name="apply_vibration_strength">Apply Vibration Strength</string>
 <string name="emergency_threshold">Automatically send SMS after %1$d unacknowledged alert(s)</string><string name="auto_sms_progress">Unacknowledged alerts: %1$d / %2$d</string><string name="emergency">Emergency</string><string name="emergency_contact_hint">Emergency contact number</string>
 <string name="automatic_sms">Send an SMS directly after the selected alert threshold. Requires SMS permission, an active SIM, and cellular service.</string><string name="send_test_emergency_sms">Send Test Emergency SMS</string>
@@ -68,9 +68,9 @@
 <string name="auth_error_username">Use a username with 3–32 letters, numbers, dot, dash, or underscore.</string>
 <string name="auth_error_password">Password must be at least 8 characters.</string>
 <string name="auth_error_confirm">The passwords do not match.</string>
-<string name="auth_error_exists">That username is already registered on this device.</string>
+<string name="auth_error_exists">That username is already registered.</string>
 <string name="auth_error_invalid">Username or password is incorrect.</string>
-<string name="auth_local_account_note">Accounts, settings, history, and sessions are stored separately on this device. Cross-device syncing requires cloud account setup.</string>
-<string name="log_out">Log out</string>
+<string name="auth_local_account_note">Accounts, settings, event history, sessions, and custom alert audio sync through your VisionEx cloud account. The Firebase project must be configured before signing in.</string>
+<string name="log_out">Log out</string><string name="cloud_setup_missing">Cloud accounts are not configured yet. Follow FIREBASE_SETUP.md to connect your Firebase project, then rebuild the app.</string><string name="cloud_network_error">Could not reach the cloud account service. Check your internet connection.</string><string name="cloud_generic_error">Cloud account operation failed. Try again.</string><string name="cloud_auth_working">Please wait…</string><string name="cloud_sync_failed">Could not synchronize this account. The app is showing locally cached data.</string><string name="cloud_sync_complete">Account data synchronized.</string><string name="cloud_signed_out">Your cloud account session has ended.</string>
 
 </resources>
