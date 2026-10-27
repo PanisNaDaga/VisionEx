@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - version-0.0.5
+      - version-0.0.6
   workflow_dispatch:
 
 permissions:
@@ -44,7 +45,7 @@ jobs:
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: VisionEx-v0.0.5-debug
+          name: VisionEx-debug-${{ github.ref_name }}
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
