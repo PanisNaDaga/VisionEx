@@ -6,8 +6,7 @@ import com.google.firebase.FirebaseOptions
 
 /**
  * Initializes Firebase from Gradle properties or environment variables.
- * Public Firebase project identifiers are intentionally supplied by the owner,
- * rather than hard-coded to a project that does not belong to this repository.
+ * The project configuration is supplied by the owner of the Firebase project.
  */
 object FirebaseRuntime {
     fun isConfigured(): Boolean =
@@ -27,7 +26,6 @@ object FirebaseRuntime {
             if (BuildConfig.FIREBASE_STORAGE_BUCKET.isNotBlank()) {
                 builder.setStorageBucket(BuildConfig.FIREBASE_STORAGE_BUCKET)
             }
-
             FirebaseApp.initializeApp(context, builder.build())
         }
         return true

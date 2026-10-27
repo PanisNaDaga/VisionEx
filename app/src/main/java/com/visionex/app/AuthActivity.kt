@@ -3,48 +3,51 @@ package com.visionex.app
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.util.Base64
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.visionex.app.databinding.ActivityAuthBinding
-import org.json.JSONObject
-import java.security.MessageDigest
-import java.security.SecureRandom
 import java.util.Locale
-import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.PBEKeySpec
 
 /**
- * Device-local account registration and login for the VisionEx prototype.
- * Passwords are not stored directly; each account has a random salt and PBKDF2 hash.
- * This is not a cloud identity system and accounts do not sync between devices.
+ * Cloud-backed VisionEx accounts.
+ * Usernames map to a private Firebase email identity and are not real mailboxes.
  */
 class AuthActivity : AppCompatActivity() {
     private lateinit var binding: ActivityAuthBinding
     private val authPrefs by lazy { getSharedPreferences("visionex_auth", MODE_PRIVATE) }
     private var registerMode = false
-
-    companion object {
-        private const val USERS_KEY = "users_json"
-        private const val HASH_ITERATIONS = 120_000
-        private const val HASH_BITS = 256
-        private const val SALT_BYTES = 16
-    }
+    private var requestInProgress = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAuthBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        if (!authPrefs.getString("current_user", null).isNullOrBlank()) {
-            enterApp(authPrefs.getString("current_user", "") ?: "")
+        if (!FirebaseRuntime.initialize(this)) {
+            showMessage(getString(R.string.cloud_setup_missing))
+            binding.authSubmitButton.isEnabled = false
+            binding.authSwitchButton.isEnabled = false
+            return
+        }
+
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        if (currentUser != null) {
+            val username = authPrefs.getString("current_user", null)
+                ?: currentUser.displayName
+                ?: currentUser.email?.substringBefore("@")
+                ?: "visionex_user"
+            enterApp(username)
             return
         }
 
         binding.authSubmitButton.setOnClickListener { submitCredentials() }
         binding.authSwitchButton.setOnClickListener {
+            if (requestInProgress) return@setOnClickListener
             registerMode = !registerMode
             clearMessage()
             updateMode()
@@ -67,6 +70,8 @@ class AuthActivity : AppCompatActivity() {
     }
 
     private fun submitCredentials() {
+        if (requestInProgress) return
+
         val username = binding.authUsername.text.toString().trim().lowercase(Locale.ROOT)
         val password = binding.authPassword.text.toString()
         val confirmation = binding.authConfirmPassword.text.toString()
@@ -79,69 +84,85 @@ class AuthActivity : AppCompatActivity() {
             showMessage(getString(R.string.auth_error_password))
             return
         }
+        if (registerMode && password != confirmation) {
+            showMessage(getString(R.string.auth_error_confirm))
+            return
+        }
 
-        val users = readUsers()
-        if (registerMode) {
-            if (password != confirmation) {
-                showMessage(getString(R.string.auth_error_confirm))
-                return
-            }
-            if (users.has(username)) {
-                showMessage(getString(R.string.auth_error_exists))
-                return
-            }
-
-            val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
-            val hash = derivePasswordHash(password.toCharArray(), salt, HASH_ITERATIONS)
-            val account = JSONObject()
-                .put("salt", Base64.encodeToString(salt, Base64.NO_WRAP))
-                .put("hash", Base64.encodeToString(hash, Base64.NO_WRAP))
-                .put("iterations", HASH_ITERATIONS)
-
-            users.put(username, account)
-            authPrefs.edit {
-                putString(USERS_KEY, users.toString())
-                putString("current_user", username)
-            }
-            enterApp(username)
+        setRequestInProgress(true)
+        clearMessage()
+        val identity = usernameToFirebaseEmail(username)
+        val auth = FirebaseAuth.getInstance()
+        val operation = if (registerMode) {
+            auth.createUserWithEmailAndPassword(identity, password)
         } else {
-            val account = users.optJSONObject(username)
-            if (account == null) {
+            auth.signInWithEmailAndPassword(identity, password)
+        }
+
+        operation.addOnSuccessListener { result ->
+            val user = result.user
+            if (user == null) {
+                setRequestInProgress(false)
                 showMessage(getString(R.string.auth_error_invalid))
-                return
+                return@addOnSuccessListener
             }
-            try {
-                val salt = Base64.decode(account.getString("salt"), Base64.NO_WRAP)
-                val expectedHash = Base64.decode(account.getString("hash"), Base64.NO_WRAP)
-                val iterations = account.optInt("iterations", HASH_ITERATIONS).coerceIn(100_000, 500_000)
-                val actualHash = derivePasswordHash(password.toCharArray(), salt, iterations)
-                if (!MessageDigest.isEqual(expectedHash, actualHash)) {
-                    showMessage(getString(R.string.auth_error_invalid))
-                    return
+
+            val profile = hashMapOf<String, Any>(
+                "username" to username,
+                "updatedAt" to System.currentTimeMillis()
+            )
+            if (registerMode) profile["createdAt"] = System.currentTimeMillis()
+
+            FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(user.uid)
+                .set(profile, SetOptions.merge())
+                .addOnSuccessListener {
+                    setRequestInProgress(false)
+                    enterApp(username)
                 }
-                authPrefs.edit { putString("current_user", username) }
-                enterApp(username)
-            } catch (_: Exception) {
-                showMessage(getString(R.string.auth_error_invalid))
-            }
+                .addOnFailureListener { error ->
+                    auth.signOut()
+                    setRequestInProgress(false)
+                    showMessage(
+                        "Authentication worked, but saving the cloud profile failed. " +
+                            (error.localizedMessage ?: "Check Firestore setup and rules.")
+                    )
+                }
+        }.addOnFailureListener { error ->
+            setRequestInProgress(false)
+            showMessage(friendlyAuthError(error))
         }
     }
 
-    private fun readUsers(): JSONObject {
-        return try {
-            JSONObject(authPrefs.getString(USERS_KEY, "{}") ?: "{}")
-        } catch (_: Exception) {
-            JSONObject()
+    private fun usernameToFirebaseEmail(username: String): String =
+        "${username.lowercase(Locale.ROOT)}@accounts.visionex.app"
+
+    private fun friendlyAuthError(error: Exception): String {
+        val message = error.localizedMessage.orEmpty()
+        return when {
+            message.contains("already in use", ignoreCase = true) ||
+                message.contains("email-already-in-use", ignoreCase = true) ->
+                getString(R.string.auth_error_exists)
+            message.contains("no user record", ignoreCase = true) ||
+                message.contains("wrong password", ignoreCase = true) ||
+                message.contains("invalid credential", ignoreCase = true) ||
+                message.contains("invalid login credentials", ignoreCase = true) ->
+                getString(R.string.auth_error_invalid)
+            message.contains("network", ignoreCase = true) ->
+                getString(R.string.cloud_network_error)
+            else -> message.ifBlank { getString(R.string.cloud_generic_error) }
         }
     }
 
-    private fun derivePasswordHash(password: CharArray, salt: ByteArray, iterations: Int): ByteArray {
-        val spec = PBEKeySpec(password, salt, iterations, HASH_BITS)
-        return try {
-            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-        } finally {
-            spec.clearPassword()
-            password.fill('\u0000')
+    private fun setRequestInProgress(inProgress: Boolean) {
+        requestInProgress = inProgress
+        binding.authSubmitButton.isEnabled = !inProgress
+        binding.authSwitchButton.isEnabled = !inProgress
+        binding.authSubmitButton.text = if (inProgress) {
+            getString(R.string.cloud_auth_working)
+        } else {
+            getString(if (registerMode) R.string.auth_register_button else R.string.auth_login_button)
         }
     }
 
