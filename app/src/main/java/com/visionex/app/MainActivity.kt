@@ -21,6 +21,8 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
 import android.view.View
@@ -741,6 +743,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupSettingsControls() {
+        binding.contactInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                prefs.edit { putString("emergency_contact", s?.toString()?.trim().orEmpty()) }
+                scheduleCloudSettingsSync()
+            }
+        })
+
         binding.vibrationSeekBar.setOnSeekBarChangeListener(simpleSeekListener { value ->
             binding.vibrationStrengthText.text = getString(R.string.vibration_strength, value)
         })
