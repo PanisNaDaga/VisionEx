@@ -208,6 +208,9 @@ class MainActivity : AppCompatActivity() {
         applySavedTheme()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.logoutButton.isEnabled = false
+        binding.clearHistoryButton.isEnabled = false
+        binding.clearSessionsButton.isEnabled = false
         createDrowsinessNotificationChannel()
 
         ble = BleVisionExManager(
@@ -400,6 +403,12 @@ class MainActivity : AppCompatActivity() {
         updateAlertAudioLabel()
         initializingControls = false
         accountDataReady = true
+        binding.logoutButton.isEnabled = true
+        binding.clearHistoryButton.isEnabled = true
+        binding.clearSessionsButton.isEnabled = true
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+            startMonitoringSession()
+        }
         if (syncInitialSettings) scheduleCloudSettingsSync()
     }
 
@@ -1020,11 +1029,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        startMonitoringSession()
+        if (accountDataReady) startMonitoringSession()
     }
 
     override fun onStop() {
-        finishMonitoringSession()
+        if (accountDataReady) finishMonitoringSession()
         super.onStop()
     }
 
