@@ -326,6 +326,15 @@
                             android:textColor="?android:attr/textColorPrimary"
                             android:textSize="13sp"
                             android:lineSpacingExtra="4dp" />
+
+                        <Button
+                            android:id="@+id/clearSessionsButton"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="@string/clear_session_history"
+                            app:cornerRadius="14dp" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
@@ -469,6 +478,50 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="6dp"
                             android:text="@string/buzzer_enabled" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="@string/alert_audio_title"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textStyle="bold"
+                            android:textSize="15sp" />
+
+                        <TextView
+                            android:id="@+id/alertAudioName"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/alert_audio_default"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp"
+                            android:text="@string/alert_audio_hint"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <Button
+                            android:id="@+id/chooseAlertAudioButton"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/choose_alert_audio"
+                            app:cornerRadius="14dp" />
+
+                        <Button
+                            android:id="@+id/defaultAlertAudioButton"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/use_default_alert_audio"
+                            app:cornerRadius="14dp" />
 
                         <View
                             android:layout_width="match_parent"
