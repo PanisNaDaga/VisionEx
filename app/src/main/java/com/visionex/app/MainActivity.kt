@@ -10,8 +10,10 @@ import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
-import android.media.AudioManager
-import android.media.ToneGenerator
+import android.media.MediaPlayer
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import android.os.VibrationEffect
@@ -32,14 +34,25 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.tasks.Tasks
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.CollectionReference
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import com.visionex.app.databinding.ActivityMainBinding
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -61,11 +74,15 @@ class MainActivity : AppCompatActivity() {
     private var bleDrowsyAcknowledged = false
     private var cameraDrowsyAcknowledged = false
     private var simulatedDrowsyAcknowledged = false
-    private val alertHandler = Handler(Looper.getMainLooper())
-    private var activeAlertTone: ToneGenerator? = null
-    private var toneReleaseRunnable: Runnable? = null
+    private var activeAlertPlayer: MediaPlayer? = null
+    private var alertAudioGeneration = 0
+    private val cloudSyncHandler = Handler(Looper.getMainLooper())
+    private var cloudSettingsSyncRunnable: Runnable? = null
+    private var initializingControls = false
+    private var accountDataReady = false
     private var smsPreparedForCurrentAlertCycle = false
     private var activeSessionStartMillis: Long? = null
+    private var activeSessionId: String? = null
 
     private var pendingSmsPayload: Pair<String, String>? = null
     private var activeSmsBatchId = 0L
@@ -84,7 +101,7 @@ class MainActivity : AppCompatActivity() {
         private const val EXTRA_SMS_PART_COUNT = "sms_part_count"
         private const val SESSION_HISTORY_KEY = "sessions"
         private const val ACTIVE_SESSION_START_KEY = "active_session_start"
-        private const val MAX_STORED_SESSIONS = 100
+        private const val ACTIVE_SESSION_ID_KEY = "active_session_id"
     }
 
     private val launcher = registerForActivityResult(
@@ -115,6 +132,12 @@ class MainActivity : AppCompatActivity() {
             prefs.edit { putBoolean("auto_sms", false) }
             Toast.makeText(this, R.string.sms_permission_denied, Toast.LENGTH_LONG).show()
         }
+    }
+
+    private val audioPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) onCustomAudioSelected(uri)
     }
 
     private val smsSentReceiver = object : BroadcastReceiver() {
@@ -159,15 +182,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val hasActiveSession = !getSharedPreferences("visionex_auth", MODE_PRIVATE)
-            .getString("current_user", null).isNullOrBlank()
-        if (hasActiveSession) applySavedTheme()
         super.onCreate(savedInstanceState)
-        if (!hasActiveSession) {
+        if (!FirebaseRuntime.initialize(this)) {
+            authPrefs.edit { remove("current_user") }
             startActivity(Intent(this, AuthActivity::class.java))
             finish()
             return
         }
+
+        val firebaseUser = FirebaseAuth.getInstance().currentUser
+        if (firebaseUser == null) {
+            authPrefs.edit { remove("current_user") }
+            startActivity(Intent(this, AuthActivity::class.java))
+            finish()
+            return
+        }
+
+        val accountName = authPrefs.getString("current_user", null)
+            ?: firebaseUser.displayName
+            ?: firebaseUser.email?.substringBefore("@")
+            ?: "visionex_user"
+        authPrefs.edit { putString("current_user", accountName.lowercase(Locale.ROOT)) }
+        applySavedTheme()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         createDrowsinessNotificationChannel()
@@ -226,12 +262,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         setupTabs()
-        restoreSettings()
-        setupSettingsControls()
         setupActions()
-        setupCameraControls()
-        updateAlerts()
-        renderHistory()
         ContextCompat.registerReceiver(
             this,
             smsSentReceiver,
@@ -239,6 +270,332 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         requestPermissionsNow()
+        loadCloudAccountData()
+    }
+
+    private fun accountDocument() =
+        FirebaseAuth.getInstance().currentUser?.uid?.let {
+            FirebaseFirestore.getInstance().collection("users").document(it)
+        }
+
+    private fun settingsDocument() =
+        accountDocument()?.collection("private")?.document("settings")
+
+    private fun historyCollection() = accountDocument()?.collection("history")
+
+    private fun sessionsCollection() = accountDocument()?.collection("sessions")
+
+    private fun loadCloudAccountData() {
+        val account = accountDocument()
+        if (account == null) {
+            startActivity(Intent(this, AuthActivity::class.java))
+            finish()
+            return
+        }
+
+        val settingsTask = account.collection("private").document("settings").get()
+        val historyTask = account.collection("history")
+            .orderBy("timestampMillis", Query.Direction.ASCENDING).get()
+        val sessionsTask = account.collection("sessions")
+            .orderBy("startedAt", Query.Direction.ASCENDING).get()
+
+        Tasks.whenAllComplete(settingsTask, historyTask, sessionsTask)
+            .addOnSuccessListener {
+                val loaded = settingsTask.isSuccessful && historyTask.isSuccessful && sessionsTask.isSuccessful
+                if (loaded) {
+                    applyCloudSettings(settingsTask.result)
+                    replaceLocalHistoryFromCloud(historyTask.result)
+                    replaceLocalSessionsFromCloud(sessionsTask.result)
+                } else {
+                    Snackbar.make(binding.root, R.string.cloud_sync_failed, Snackbar.LENGTH_LONG).show()
+                }
+                initializeAccountUi(syncInitialSettings = loaded)
+            }
+            .addOnFailureListener {
+                Snackbar.make(binding.root, R.string.cloud_sync_failed, Snackbar.LENGTH_LONG).show()
+                initializeAccountUi(syncInitialSettings = false)
+            }
+    }
+
+    private fun initializeAccountUi(syncInitialSettings: Boolean) {
+        if (accountDataReady) return
+        initializingControls = true
+        restoreSettings()
+        setupSettingsControls()
+        setupCameraControls()
+        updateAlerts()
+        renderHistory()
+        renderSessions()
+        updateAlertAudioLabel()
+        initializingControls = false
+        accountDataReady = true
+        if (syncInitialSettings) scheduleCloudSettingsSync()
+    }
+
+    private fun applyCloudSettings(snapshot: DocumentSnapshot) {
+        if (!snapshot.exists()) return
+        val editor = prefs.edit()
+        val integerKeys = setOf(
+            "vibration_strength", "emergency_threshold", "alerts",
+            "camera_confidence", "camera_perclos_window",
+            "camera_perclos_threshold", "camera_microsleep", "camera_closed_class"
+        )
+        snapshot.data.orEmpty().forEach { (key, value) ->
+            if (key == "updatedAt" || key == "custom_audio_uri") return@forEach
+            when (value) {
+                is Boolean -> editor.putBoolean(key, value)
+                is String -> editor.putString(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Number -> {
+                    if (key in integerKeys) editor.putInt(key, value.toInt())
+                    else editor.putLong(key, value.toLong())
+                }
+            }
+        }
+        editor.apply()
+    }
+
+    private fun replaceLocalHistoryFromCloud(snapshot: QuerySnapshot) {
+        val history = JSONArray()
+        snapshot.documents.forEach { document ->
+            val timestamp = document.getLong("timestampMillis") ?: 0L
+            val time = document.getString("time")
+                ?: SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+            history.put(
+                JSONObject()
+                    .put("time", time)
+                    .put("description", document.getString("description").orEmpty())
+                    .put("timestampMillis", timestamp)
+                    .put("eventId", document.id)
+            )
+        }
+        prefs.edit { putString("history", history.toString()) }
+    }
+
+    private fun replaceLocalSessionsFromCloud(snapshot: QuerySnapshot) {
+        val items = mutableListOf<JSONObject>()
+        snapshot.documents.forEach { document ->
+            items.add(
+                JSONObject()
+                    .put("sessionId", document.id)
+                    .put("startedAt", document.getLong("startedAt") ?: 0L)
+                    .put("endedAt", document.getLong("endedAt") ?: 0L)
+                    .put("recovered", document.getBoolean("recovered") ?: false)
+            )
+        }
+
+        // Keep a just-started local session if it began while the cloud read was in flight.
+        val currentId = activeSessionId
+        val currentStart = activeSessionStartMillis
+        if (currentId != null && currentStart != null && items.none { it.optString("sessionId") == currentId }) {
+            items.add(
+                JSONObject()
+                    .put("sessionId", currentId)
+                    .put("startedAt", currentStart)
+                    .put("endedAt", 0L)
+                    .put("recovered", false)
+            )
+        }
+        items.sortBy { it.optLong("startedAt", 0L) }
+        val array = JSONArray()
+        items.forEach { array.put(it) }
+        prefs.edit { putString(SESSION_HISTORY_KEY, array.toString()) }
+    }
+
+    private fun scheduleCloudSettingsSync() {
+        if (!accountDataReady || initializingControls) return
+        cloudSettingsSyncRunnable?.let { cloudSyncHandler.removeCallbacks(it) }
+        val runnable = Runnable { saveSettingsToCloud() }
+        cloudSettingsSyncRunnable = runnable
+        cloudSyncHandler.postDelayed(runnable, 450L)
+    }
+
+    private fun saveSettingsToCloud() {
+        val document = settingsDocument() ?: return
+        val excludedKeys = setOf(
+            "history", SESSION_HISTORY_KEY, ACTIVE_SESSION_START_KEY,
+            ACTIVE_SESSION_ID_KEY, "custom_audio_uri"
+        )
+        val settings = hashMapOf<String, Any>()
+        prefs.all.forEach { (key, value) ->
+            if (key in excludedKeys || value == null) return@forEach
+            when (value) {
+                is Boolean, is String, is Int, is Long, is Float, is Double -> settings[key] = value
+            }
+        }
+        settings["updatedAt"] = System.currentTimeMillis()
+        document.set(settings, SetOptions.merge())
+            .addOnFailureListener {
+                android.util.Log.w("VisionEx", "Cloud settings sync failed", it)
+            }
+    }
+
+    private fun saveCloudHistoryEvent(time: String, description: String, timestampMillis: Long) {
+        historyCollection()?.document()?.set(
+            mapOf(
+                "time" to time,
+                "description" to description,
+                "timestampMillis" to timestampMillis
+            )
+        )?.addOnFailureListener {
+            android.util.Log.w("VisionEx", "Cloud history write failed", it)
+        }
+    }
+
+    private fun saveCloudSession(
+        sessionId: String,
+        startedAt: Long,
+        endedAt: Long,
+        recovered: Boolean
+    ) {
+        sessionsCollection()?.document(sessionId)?.set(
+            mapOf(
+                "sessionId" to sessionId,
+                "startedAt" to startedAt,
+                "endedAt" to endedAt,
+                "recovered" to recovered,
+                "updatedAt" to System.currentTimeMillis()
+            ),
+            SetOptions.merge()
+        )?.addOnFailureListener {
+            android.util.Log.w("VisionEx", "Cloud session write failed", it)
+        }
+    }
+
+    private fun deleteCloudDocuments(
+        documents: List<DocumentSnapshot>,
+        offset: Int = 0,
+        onComplete: () -> Unit
+    ) {
+        if (offset >= documents.size) {
+            onComplete()
+            return
+        }
+        val chunk = documents.drop(offset).take(400)
+        val batch = FirebaseFirestore.getInstance().batch()
+        chunk.forEach { batch.delete(it.reference) }
+        batch.commit()
+            .addOnSuccessListener { deleteCloudDocuments(documents, offset + chunk.size, onComplete) }
+            .addOnFailureListener {
+                Snackbar.make(binding.root, R.string.cloud_sync_failed, Snackbar.LENGTH_LONG).show()
+            }
+    }
+
+    private fun clearHistoryForAccount() {
+        prefs.edit { remove("history") }
+        renderHistory()
+        val collection = historyCollection() ?: return
+        collection.get()
+            .addOnSuccessListener { snapshot ->
+                deleteCloudDocuments(snapshot.documents) {
+                    Snackbar.make(binding.root, R.string.no_events_recorded, Snackbar.LENGTH_SHORT).show()
+                }
+            }
+            .addOnFailureListener {
+                Snackbar.make(binding.root, R.string.cloud_sync_failed, Snackbar.LENGTH_LONG).show()
+            }
+    }
+
+    private fun clearSessionHistoryForAccount() {
+        val previous = getSessions()
+        val activeOnly = JSONArray()
+        for (i in 0 until previous.length()) {
+            val session = previous.optJSONObject(i) ?: continue
+            if (session.optLong("endedAt", 0L) <= 0L) activeOnly.put(session)
+        }
+        prefs.edit { putString(SESSION_HISTORY_KEY, activeOnly.toString()) }
+        renderSessions()
+
+        val collection = sessionsCollection() ?: return
+        collection.whereGreaterThan("endedAt", 0L).get()
+            .addOnSuccessListener { snapshot ->
+                deleteCloudDocuments(snapshot.documents) { renderSessions() }
+            }
+            .addOnFailureListener {
+                Snackbar.make(binding.root, R.string.cloud_sync_failed, Snackbar.LENGTH_LONG).show()
+            }
+    }
+
+    private fun updateAlertAudioLabel() {
+        if (!::binding.isInitialized) return
+        val label = prefs.getString("alert_audio_label", "").orEmpty()
+        binding.alertAudioName.text = if (label.isBlank()) {
+            getString(R.string.alert_audio_default)
+        } else if (label == getString(R.string.alert_audio_default)) {
+            label
+        } else {
+            getString(R.string.alert_audio_custom, label)
+        }
+    }
+
+    private fun onCustomAudioSelected(uri: Uri) {
+        try {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: Exception) {
+            // Some document providers do not offer persistable URI permissions.
+        }
+        val label = contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment ?: "Custom alert sound"
+
+        prefs.edit {
+            putString("custom_audio_uri", uri.toString())
+            putString("alert_audio_label", label)
+            putString("alert_audio_url", "")
+        }
+        updateAlertAudioLabel()
+        scheduleCloudSettingsSync()
+        uploadCustomAlertAudio(uri)
+        if (isCurrentlyDrowsy) startAlertAudio()
+    }
+
+    private fun uploadCustomAlertAudio(uri: Uri) {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        if (BuildConfig.FIREBASE_STORAGE_BUCKET.isBlank()) {
+            Snackbar.make(binding.root, R.string.alert_audio_storage_missing, Snackbar.LENGTH_LONG).show()
+            return
+        }
+        val reference = try {
+            FirebaseStorage.getInstance().reference
+                .child("users/${user.uid}/alert_audio/custom_alert")
+        } catch (_: Exception) {
+            Snackbar.make(binding.root, R.string.alert_audio_storage_missing, Snackbar.LENGTH_LONG).show()
+            return
+        }
+
+        val rawContentType = contentResolver.getType(uri) ?: "audio/mpeg"
+        val contentType = if (rawContentType.startsWith("audio/")) rawContentType else "audio/mpeg"
+        val metadata = StorageMetadata.Builder().setContentType(contentType).build()
+        Snackbar.make(binding.root, R.string.alert_audio_uploading, Snackbar.LENGTH_SHORT).show()
+        reference.putFile(uri, metadata)
+            .continueWithTask { task ->
+                if (!task.isSuccessful) {
+                    throw task.exception ?: IllegalStateException("Custom audio upload failed.")
+                }
+                reference.downloadUrl
+            }
+            .addOnSuccessListener { downloadUri ->
+                prefs.edit { putString("alert_audio_url", downloadUri.toString()) }
+                scheduleCloudSettingsSync()
+                if (isCurrentlyDrowsy) startAlertAudio()
+                Snackbar.make(binding.root, R.string.alert_audio_uploaded, Snackbar.LENGTH_LONG).show()
+            }
+            .addOnFailureListener { error ->
+                Snackbar.make(
+                    binding.root,
+                    getString(R.string.alert_audio_upload_failed, error.localizedMessage ?: "unknown error"),
+                    Snackbar.LENGTH_LONG
+                ).show()
+            }
     }
 
     private fun setupTabs() {
@@ -291,6 +648,7 @@ class MainActivity : AppCompatActivity() {
         binding.autoSmsSwitch.isChecked = prefs.getBoolean("auto_sms", false)
         binding.vibrationSwitch.isChecked = prefs.getBoolean("vibration_enabled", true)
         binding.buzzerSwitch.isChecked = prefs.getBoolean("buzzer_enabled", true)
+        updateAlertAudioLabel()
 
         val strength = prefs.getInt("vibration_strength", 70)
         binding.vibrationSeekBar.progress = strength
@@ -321,28 +679,35 @@ class MainActivity : AppCompatActivity() {
             prefs.edit { putInt("emergency_threshold", emergencyThreshold) }
             binding.emergencyThresholdText.text = getString(R.string.emergency_threshold, emergencyThreshold)
             updateAutoSmsProgress()
+            scheduleCloudSettingsSync()
         })
 
         binding.applyVibrationButton.setOnClickListener {
             animateTap(it)
             val strength = binding.vibrationSeekBar.progress
             prefs.edit { putInt("vibration_strength", strength) }
+            scheduleCloudSettingsSync()
             ble.sendCommand("VIBRATION:" + strength)
             Toast.makeText(this, R.string.settings_sent, Toast.LENGTH_SHORT).show()
         }
 
         binding.vibrationSwitch.setOnCheckedChangeListener { _, enabled ->
             prefs.edit { putBoolean("vibration_enabled", enabled) }
+            scheduleCloudSettingsSync()
+            if (isCurrentlyDrowsy) updateActiveAlertOutputs()
             ble.sendCommand("VIBRATION_ENABLED:" + if (enabled) "1" else "0")
         }
 
         binding.buzzerSwitch.setOnCheckedChangeListener { _, enabled ->
             prefs.edit { putBoolean("buzzer_enabled", enabled) }
+            scheduleCloudSettingsSync()
+            if (isCurrentlyDrowsy) updateActiveAlertOutputs()
             ble.sendCommand("BUZZER_ENABLED:" + if (enabled) "1" else "0")
         }
 
         binding.autoSmsSwitch.setOnCheckedChangeListener { _, enabled ->
             prefs.edit { putBoolean("auto_sms", enabled) }
+            scheduleCloudSettingsSync()
             updateAutoSmsProgress()
             if (enabled &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) !=
@@ -360,6 +725,23 @@ class MainActivity : AppCompatActivity() {
             }
             prefs.edit { putString("theme", theme) }
             applyTheme(theme)
+            scheduleCloudSettingsSync()
+        }
+
+        binding.chooseAlertAudioButton.setOnClickListener {
+            animateTap(it)
+            audioPickerLauncher.launch(arrayOf("audio/*"))
+        }
+        binding.defaultAlertAudioButton.setOnClickListener {
+            animateTap(it)
+            prefs.edit {
+                putString("custom_audio_uri", "")
+                putString("alert_audio_url", "")
+                putString("alert_audio_label", getString(R.string.alert_audio_default))
+            }
+            updateAlertAudioLabel()
+            scheduleCloudSettingsSync()
+            if (isCurrentlyDrowsy) startAlertAudio()
         }
     }
 
@@ -438,6 +820,7 @@ class MainActivity : AppCompatActivity() {
             putInt("camera_closed_class", closedClassIndex)
             putBoolean("camera_front", frontCamera)
         }
+        scheduleCloudSettingsSync()
         cameraManager.setOptions(
             yolo = binding.cameraYoloSwitch.isChecked,
             perclos = binding.cameraPerclosSwitch.isChecked,
@@ -495,21 +878,25 @@ class MainActivity : AppCompatActivity() {
                 putInt("alerts", 0)
                 remove("auto_sms_detection_count")
             }
-            if (bleDrowsy) bleDrowsyAcknowledged = true
-            if (cameraDrowsy) cameraDrowsyAcknowledged = true
-            if (simulatedDrowsy) simulatedDrowsyAcknowledged = true
+            if (simulatedDrowsy) {
+                simulatedDrowsy = false
+                simulatedDrowsyAcknowledged = true
+            }
             smsPreparedForCurrentAlertCycle = false
-            setNormal()
             updateAlerts()
             updateAutoSmsProgress()
+            scheduleCloudSettingsSync()
+            refreshCombinedDrowsinessStatus()
             ble.sendCommand("ACK")
             ble.sendCommand("ALERT:0")
             addEvent("Alert acknowledged")
         }
         binding.logoutButton.setOnClickListener {
+            finishMonitoringSession()
             stopLocalAlerts()
             cameraManager.stopCamera()
             ble.disconnect()
+            FirebaseAuth.getInstance().signOut()
             authPrefs.edit { remove("current_user") }
             startActivity(Intent(this, AuthActivity::class.java))
             finish()
@@ -524,8 +911,21 @@ class MainActivity : AppCompatActivity() {
         }
         binding.clearHistoryButton.setOnClickListener {
             animateTap(it)
-            prefs.edit { remove("history") }
-            renderHistory()
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.confirm_clear_history_title)
+                .setMessage(R.string.confirm_clear_history_message)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.clear) { _, _ -> clearHistoryForAccount() }
+                .show()
+        }
+        binding.clearSessionsButton.setOnClickListener {
+            animateTap(it)
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.confirm_clear_sessions_title)
+                .setMessage(R.string.confirm_clear_sessions_message)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.clear) { _, _ -> clearSessionHistoryForAccount() }
+                .show()
         }
         binding.testSmsButton.setOnClickListener {
             animateTap(it)
@@ -614,52 +1014,116 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startLocalAlerts() {
+        updateActiveAlertOutputs()
+    }
+
+    private fun updateActiveAlertOutputs() {
         val vibrationEnabled = prefs.getBoolean("vibration_enabled", true)
         val buzzerEnabled = prefs.getBoolean("buzzer_enabled", true)
 
         if (vibrationEnabled) {
             val vibrator = getSystemVibrator()
             if (vibrator.hasVibrator()) {
-                vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 300L, 150L, 300L, 150L, 350L), -1))
+                vibrator.vibrate(
+                    VibrationEffect.createWaveform(
+                        longArrayOf(0L, 300L, 150L, 300L, 150L, 350L),
+                        -1
+                    )
+                )
             }
+        } else {
+            try { getSystemVibrator().cancel() } catch (_: Exception) {}
         }
 
         if (buzzerEnabled) {
-            stopAlertTone()
-            val tone = ToneGenerator(AudioManager.STREAM_ALARM, 90)
-            activeAlertTone = tone
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 1200)
-            val cleanup = Runnable {
-                if (activeAlertTone === tone) {
-                    tone.release()
-                    activeAlertTone = null
-                }
-                toneReleaseRunnable = null
-            }
-            toneReleaseRunnable = cleanup
-            alertHandler.postDelayed(cleanup, 1300L)
+            if (activeAlertPlayer == null) startAlertAudio()
+        } else {
+            stopAlertAudio()
         }
 
-        // The ESP32 firmware must understand ALERT:1 / ALERT:0 for glasses hardware alerts.
+        // The hardware firmware should latch ALERT:1 until it receives ALERT:0.
         ble.sendCommand(if (vibrationEnabled || buzzerEnabled) "ALERT:1" else "ALERT:0")
     }
 
-    private fun stopAlertTone() {
-        toneReleaseRunnable?.let { alertHandler.removeCallbacks(it) }
-        toneReleaseRunnable = null
-        activeAlertTone?.let { tone ->
-            try { tone.stopTone() } catch (_: Exception) {}
-            try { tone.release() } catch (_: Exception) {}
+    private fun startAlertAudio() {
+        stopAlertAudio()
+        if (!isCurrentlyDrowsy || !prefs.getBoolean("buzzer_enabled", true)) return
+        val generation = alertAudioGeneration
+        val candidates = listOfNotNull(
+            prefs.getString("custom_audio_uri", null)?.takeIf { it.isNotBlank() },
+            prefs.getString("alert_audio_url", null)?.takeIf { it.isNotBlank() },
+            Settings.System.DEFAULT_ALARM_ALERT_URI?.toString(),
+            Settings.System.DEFAULT_NOTIFICATION_URI?.toString()
+        ).distinct()
+
+        fun attempt(index: Int) {
+            if (generation != alertAudioGeneration || !isCurrentlyDrowsy) return
+            if (index >= candidates.size) {
+                addEvent("Alert audio could not be played")
+                return
+            }
+
+            val player = MediaPlayer()
+            activeAlertPlayer = player
+            player.isLooping = true
+            player.setOnPreparedListener { readyPlayer ->
+                if (generation == alertAudioGeneration && isCurrentlyDrowsy &&
+                    prefs.getBoolean("buzzer_enabled", true)
+                ) {
+                    try {
+                        readyPlayer.isLooping = true
+                        readyPlayer.start()
+                    } catch (_: Exception) {
+                        readyPlayer.release()
+                        if (activeAlertPlayer === readyPlayer) activeAlertPlayer = null
+                        attempt(index + 1)
+                    }
+                } else {
+                    try { readyPlayer.release() } catch (_: Exception) {}
+                    if (activeAlertPlayer === readyPlayer) activeAlertPlayer = null
+                }
+            }
+            player.setOnErrorListener { failedPlayer, _, _ ->
+                try { failedPlayer.release() } catch (_: Exception) {}
+                if (activeAlertPlayer === failedPlayer) activeAlertPlayer = null
+                attempt(index + 1)
+                true
+            }
+
+            try {
+                val source = candidates[index]
+                if (source.startsWith("http://", true) || source.startsWith("https://", true)) {
+                    player.setDataSource(source)
+                } else {
+                    player.setDataSource(this, Uri.parse(source))
+                }
+                player.prepareAsync()
+            } catch (_: Exception) {
+                try { player.release() } catch (_: Exception) {}
+                if (activeAlertPlayer === player) activeAlertPlayer = null
+                attempt(index + 1)
+            }
         }
-        activeAlertTone = null
+
+        attempt(0)
+    }
+
+    private fun stopAlertAudio() {
+        alertAudioGeneration++
+        activeAlertPlayer?.let { player ->
+            try {
+                player.setOnPreparedListener(null)
+                player.setOnErrorListener(null)
+                if (player.isPlaying) player.stop()
+            } catch (_: Exception) {}
+            try { player.release() } catch (_: Exception) {}
+        }
+        activeAlertPlayer = null
     }
 
     private fun stopLocalAlerts() {
-        try {
-            val vibrator = getSystemVibrator()
-            if (vibrator.hasVibrator()) vibrator.cancel()
-        } catch (_: Exception) {}
-        stopAlertTone()
+        try { getSystemVibrator().cancel() } catch (_: Exception) {}
+        stopAlertAudio()
     }
 
     private fun syncHardwareAlertSettings() {
@@ -725,10 +1189,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshCombinedDrowsinessStatus() {
-        val effectiveDrowsiness =
-            (bleDrowsy && !bleDrowsyAcknowledged) ||
-            (cameraDrowsy && !cameraDrowsyAcknowledged) ||
-            (simulatedDrowsy && !simulatedDrowsyAcknowledged)
+        val effectiveDrowsiness = bleDrowsy || cameraDrowsy || simulatedDrowsy
         if (effectiveDrowsiness) drowsy() else if (isCurrentlyDrowsy) setNormal()
     }
 
@@ -753,6 +1214,7 @@ class MainActivity : AppCompatActivity() {
             .setDuration(260).start()
         alerts++
         prefs.edit { putInt("alerts", alerts) }
+        scheduleCloudSettingsSync()
         updateAlerts()
         addEvent("Drowsiness detected (alert " + alerts + ")")
 
@@ -804,6 +1266,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveContact() {
         prefs.edit { putString("emergency_contact", binding.contactInput.text.toString().trim()) }
+        scheduleCloudSettingsSync()
     }
 
     private fun sendEmergency(test: Boolean, triggeredAtCount: Int = emergencyThreshold) {
@@ -944,52 +1407,83 @@ class MainActivity : AppCompatActivity() {
 
         val now = System.currentTimeMillis()
         val unfinishedStart = prefs.getLong(ACTIVE_SESSION_START_KEY, 0L)
+        val unfinishedId = prefs.getString(ACTIVE_SESSION_ID_KEY, null)
         if (unfinishedStart > 0L) {
-            // If Android killed the process unexpectedly, preserve the unfinished
-            // record and mark the end as estimated at the next launch.
-            storeCompletedSession(unfinishedStart, maxOf(unfinishedStart, now), recovered = true)
+            storeCompletedSession(
+                unfinishedStart,
+                maxOf(unfinishedStart, now),
+                recovered = true,
+                sessionId = unfinishedId ?: UUID.randomUUID().toString()
+            )
         }
 
         activeSessionStartMillis = now
-        prefs.edit { putLong(ACTIVE_SESSION_START_KEY, now) }
+        activeSessionId = UUID.randomUUID().toString()
+        prefs.edit {
+            putLong(ACTIVE_SESSION_START_KEY, now)
+            putString(ACTIVE_SESSION_ID_KEY, activeSessionId)
+        }
+        upsertLocalSession(activeSessionId!!, now, 0L, recovered = false)
+        saveCloudSession(activeSessionId!!, now, 0L, recovered = false)
         renderSessions()
     }
 
     private fun finishMonitoringSession() {
         val startedAt = activeSessionStartMillis ?: prefs.getLong(ACTIVE_SESSION_START_KEY, 0L)
         if (startedAt <= 0L) return
-
         val endedAt = maxOf(startedAt, System.currentTimeMillis())
-        storeCompletedSession(startedAt, endedAt, recovered = false)
+        val sessionId = activeSessionId
+            ?: prefs.getString(ACTIVE_SESSION_ID_KEY, null)
+            ?: UUID.randomUUID().toString()
+        storeCompletedSession(startedAt, endedAt, recovered = false, sessionId = sessionId)
         activeSessionStartMillis = null
-        prefs.edit { remove(ACTIVE_SESSION_START_KEY) }
+        activeSessionId = null
+        prefs.edit {
+            remove(ACTIVE_SESSION_START_KEY)
+            remove(ACTIVE_SESSION_ID_KEY)
+        }
         renderSessions()
     }
 
-    private fun storeCompletedSession(startedAt: Long, endedAt: Long, recovered: Boolean) {
+    private fun storeCompletedSession(
+        startedAt: Long,
+        endedAt: Long,
+        recovered: Boolean,
+        sessionId: String
+    ) {
+        upsertLocalSession(sessionId, startedAt, endedAt, recovered)
+        saveCloudSession(sessionId, startedAt, endedAt, recovered)
+    }
+
+    private fun upsertLocalSession(
+        sessionId: String,
+        startedAt: Long,
+        endedAt: Long,
+        recovered: Boolean
+    ) {
+        val items = mutableListOf<JSONObject>()
         val previous = getSessions()
-        val updated = JSONArray()
-        val firstToKeep = (previous.length() - MAX_STORED_SESSIONS + 1).coerceAtLeast(0)
-        for (i in firstToKeep until previous.length()) {
-            val session = previous.optJSONObject(i) ?: continue
-            updated.put(session)
+        for (i in 0 until previous.length()) {
+            val existing = previous.optJSONObject(i) ?: continue
+            if (existing.optString("sessionId") != sessionId) items.add(existing)
         }
-        updated.put(
+        items.add(
             JSONObject()
+                .put("sessionId", sessionId)
                 .put("startedAt", startedAt)
                 .put("endedAt", endedAt)
                 .put("recovered", recovered)
         )
+        items.sortBy { it.optLong("startedAt", 0L) }
+        val updated = JSONArray()
+        items.forEach { updated.put(it) }
         prefs.edit { putString(SESSION_HISTORY_KEY, updated.toString()) }
     }
 
     private fun getSessions(): JSONArray {
         val saved = prefs.getString(SESSION_HISTORY_KEY, null)
-        return try {
-            if (saved.isNullOrBlank()) JSONArray() else JSONArray(saved)
-        } catch (_: Exception) {
-            JSONArray()
-        }
+        return try { if (saved.isNullOrBlank()) JSONArray() else JSONArray(saved) }
+        catch (_: Exception) { JSONArray() }
     }
 
     private fun formatSessionTimestamp(timestamp: Long): String =
@@ -997,52 +1491,39 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderSessions() {
         if (!::binding.isInitialized) return
-
-        val rows = mutableListOf<String>()
-        activeSessionStartMillis?.let { startedAt ->
-            rows += getString(R.string.session_started_at, formatSessionTimestamp(startedAt)) +
-                "\n" + getString(R.string.session_in_progress)
-        }
-
         val sessions = getSessions()
+        val rows = mutableListOf<String>()
         for (i in sessions.length() - 1 downTo 0) {
             val session = sessions.optJSONObject(i) ?: continue
             val startedAt = session.optLong("startedAt", 0L)
-            val endedAt = session.optLong("endedAt", 0L)
             if (startedAt <= 0L) continue
-
-            val startedLine = getString(
-                R.string.session_started_at,
-                formatSessionTimestamp(startedAt)
-            )
+            val endedAt = session.optLong("endedAt", 0L)
+            val startedLine = getString(R.string.session_started_at, formatSessionTimestamp(startedAt))
             val endedLine = if (endedAt > 0L) {
                 getString(R.string.session_ended_at, formatSessionTimestamp(endedAt))
-            } else {
-                getString(R.string.session_in_progress)
-            }
+            } else getString(R.string.session_in_progress)
             val recoveryNote = if (session.optBoolean("recovered", false)) {
                 "\n" + getString(R.string.session_end_estimated_note)
-            } else {
-                ""
-            }
-            rows += "$startedLine\n$endedLine$recoveryNote"
+            } else ""
+            rows += "Session ${i + 1}\n$startedLine\n$endedLine$recoveryNote"
         }
-
         binding.sessionHistoryText.text = if (rows.isEmpty()) {
             getString(R.string.no_sessions_recorded)
-        } else {
-            rows.joinToString("\n\n")
-        }
+        } else rows.joinToString("\n\n")
     }
 
     private fun addEvent(desc: String) {
+        val now = System.currentTimeMillis()
+        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(now))
         val h = getHistory()
         h.put(
             JSONObject()
-                .put("time", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()))
+                .put("time", time)
                 .put("description", desc)
+                .put("timestampMillis", now)
         )
         prefs.edit { putString("history", h.toString()) }
+        saveCloudHistoryEvent(time, desc, now)
         renderHistory()
     }
 
