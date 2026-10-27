@@ -1,48 +1,32 @@
 # VisionEx v0.0.6: Firebase cloud setup
 
-Version 0.0.6 uses Firebase Authentication, Cloud Firestore, and Firebase Storage. Cloud services are **not active until you configure your own Firebase project**. This repository intentionally does not include another person's Firebase project credentials.
+Version 0.0.6 uses Firebase Authentication, Cloud Firestore, and Firebase Storage. The Android app is configured with the Google services Gradle plugin and `app/google-services.json`.
 
-## 1. Create and configure the Firebase project
+## 1. Confirm the Firebase project
 
-1. Create a project in the Firebase Console: https://console.firebase.google.com/
-2. Register an Android app with package name `com.visionex.app`.
-3. In **Authentication → Sign-in method**, enable **Email/Password**.
-4. Create a Cloud Firestore database.
-5. Create a Cloud Storage bucket.
-6. In **Project settings → General**, copy the Web API key, Android App ID, Project ID, and Storage bucket name.
+The included `app/google-services.json` is configured for project `visionex-c6d5a` and Android package `com.visionex.app`. If you use a different Firebase project, download its Android configuration file from Firebase Console → Project settings → General and replace `app/google-services.json`. The registered Android package must be exactly `com.visionex.app`.
+
+The Firebase Android configuration file contains client configuration values used by the app. It is not a substitute for security rules. Keep Firestore and Storage locked down with the included rules, and restrict the API key to the Android app where practical.
+
+## 2. Enable Firebase services
+
+1. In Firebase Console → Authentication → Sign-in method, enable **Email/Password**.
+2. Create a **Cloud Firestore** database.
+3. Create a **Cloud Storage** bucket.
+4. Publish `firestore.rules` in Firestore Database → Rules.
+5. Publish `storage.rules` in Storage → Rules.
+
+Firebase Console: https://console.firebase.google.com/
 
 VisionEx allows a username and password in the app. Internally, the username is mapped to an email-shaped Firebase identity ending in `@accounts.visionex.app`. This is an internal sign-in identity, not a real email inbox, and does not support email-based password recovery. Usernames are normalized to lowercase.
 
-## 2. Configure Gradle
+## 3. Build the APK
 
-Set these properties in your **user-level** Gradle properties file so you do not need to commit project details into the repository.
+The root Gradle file applies the Google services plugin version `4.5.0`, and the app module reads `app/google-services.json`. Firebase Auth, Firestore, and Storage are already included as dependencies.
 
-Windows:
-`%USERPROFILE%\.gradle\gradle.properties`
+In Android Studio, select **Sync Project with Gradle Files**, then use **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
 
-macOS/Linux:
-`~/.gradle/gradle.properties`
-
-Add:
-
-```properties
-visionexFirebaseApiKey=YOUR_FIREBASE_WEB_API_KEY
-visionexFirebaseAppId=YOUR_ANDROID_APP_ID
-visionexFirebaseProjectId=YOUR_FIREBASE_PROJECT_ID
-visionexFirebaseStorageBucket=YOUR_FIREBASE_STORAGE_BUCKET
-```
-
-Rebuild the app after adding the values. The app will show a setup message and disable login/registration while the required authentication values are missing.
-
-For CI, the Gradle script also accepts the environment variables `VISIONEX_FIREBASE_API_KEY`, `VISIONEX_FIREBASE_APP_ID`, `VISIONEX_FIREBASE_PROJECT_ID`, and `VISIONEX_FIREBASE_STORAGE_BUCKET`.
-
-## 3. Publish security rules
-
-Publish the supplied `firestore.rules` in Firebase Console → Firestore Database → Rules.
-
-Publish the supplied `storage.rules` in Firebase Console → Storage → Rules.
-
-The Firestore rules restrict each user's data to the authenticated Firebase UID. The Storage rules restrict custom alert audio to the authenticated user's own storage path and limit uploads to audio files smaller than 10 MB.
+Because the configuration file is part of the branch, local builds and GitHub Actions builds use the same Firebase project configuration. You do not need to add Firebase values to your personal Gradle properties file.
 
 ## 4. Where account data is stored
 
